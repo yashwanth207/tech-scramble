@@ -199,7 +199,9 @@ function QuestionForm({
     e.target.value = "";
     if (!file) return;
     setUploadError("");
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    const isExtValid = /\.(jpe?g|png|webp)$/i.test(file.name);
+    const isMimeValid = ALLOWED_IMAGE_TYPES.includes(file.type) || file.type.startsWith("image/");
+    if (!isExtValid && !isMimeValid) {
       setUploadError("Only JPG, JPEG, PNG or WebP images are allowed.");
       return;
     }

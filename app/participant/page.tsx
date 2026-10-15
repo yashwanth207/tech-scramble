@@ -104,6 +104,42 @@ export default function ParticipantPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loadingLb, setLoadingLb] = useState<boolean>(false);
 
+  // Live game synchronization state from host
+  const [liveState, setLiveState] = useState<{
+    activeSetId: string;
+    activeRoundId: string;
+    currentQuestionIndex: number;
+    timerRunning: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function syncGame() {
+      try {
+        const res = await fetch("/api/game-state", { cache: "no-store" });
+        const data = (await res.json().catch(() => null)) as {
+          gameState?: {
+            activeSetId: string;
+            activeRoundId: string;
+            currentQuestionIndex: number;
+            timerRunning: boolean;
+          };
+        } | null;
+        if (!cancelled && res.ok && data?.gameState) {
+          setLiveState(data.gameState);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    syncGame();
+    const interval = setInterval(syncGame, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
   // Load sets, rounds and safe questions from API
   useEffect(() => {
     let cancelled = false;
@@ -410,6 +446,35 @@ export default function ParticipantPage() {
           🏆 Live Leaderboard
         </button>
       </div>
+
+      {liveState && liveState.activeRoundId && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-400/40 bg-cyan-400/10 p-4">
+          <div className="flex items-center gap-2.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 animate-pulse" />
+            <div>
+              <p className="text-xs font-mono uppercase text-cyan-300 font-bold">Host Live Round in Progress</p>
+              <p className="text-sm font-semibold text-white">
+                Host is on: {roundNameOf(liveState.activeRoundId)} — Question {liveState.currentQuestionIndex + 1}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const qs = questionsOf(liveState.activeRoundId);
+              if (qs.length > 0) {
+                setActiveRoundId(liveState.activeRoundId);
+                const idx = Math.min(liveState.currentQuestionIndex, qs.length - 1);
+                openQuestion(qs, idx);
+                setScreen("quiz");
+              }
+            }}
+            className={primaryBtn}
+          >
+            Follow Host Question →
+          </button>
+        </div>
+      )}
 
       <ul className="grid gap-4 md:grid-cols-3">
         {rounds.map((round, i) => {
