@@ -36,7 +36,7 @@ export function getBackendStatus() {
 
   const supabaseUrl = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/+$/, "");
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-  const adminKey = process.env.ADMIN_UPLOAD_KEY || "techscramble2026";
+  const adminKey = process.env.ADMIN_UPLOAD_KEY || "Bommali";
 
   const isFirebaseConfigured = Boolean(firebaseProjectId);
   const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
