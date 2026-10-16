@@ -25,6 +25,10 @@ interface PublicQuestion {
   timer: number;
   imageUrl: string;
   options?: string[];
+  emojiClue?: string;
+  targetWord?: string;
+  tabooWords?: string[];
+  cardReference?: string;
 }
 
 interface PublicQuiz {
@@ -43,13 +47,10 @@ interface LeaderboardEntry {
   questionsAnswered: number;
 }
 
-const IMAGE_ROUND_NAME = "ai or real image";
-const IMAGE_CHOICES = ["Real photo", "AI-generated"];
-
 const ROUND_BLURBS: Record<string, string> = {
-  "guess the tiktok word": "Inspect the visual clue or prompt, then type the matching slang or trend phrase.",
-  "ai or real image": "Inspect the visual and choose: is it real or AI-generated?",
-  "tech taboo": "Guess the tech term from your teammate's clues without saying any taboo words!",
+  "ai quick q&a": "Fast-paced AI definitions and core concepts. Submit one-word answers before time runs out.",
+  "emoji tech guess": "Inspect the emoji sequence and decode the matching technology term.",
+  "tech taboo": "Describe the tech term without uttering any of the prohibited words!",
 };
 
 type Screen = "setup" | "rounds" | "quiz" | "results";
@@ -178,7 +179,10 @@ export default function ParticipantPage() {
   );
 
   const roundNameOf = (roundId: string) => rounds.find((r) => r.id === roundId)?.name ?? "";
-  const isImageRound = (q: PublicQuestion) => roundNameOf(q.roundId).trim().toLowerCase() === IMAGE_ROUND_NAME;
+  const isEmojiRound = (q: PublicQuestion) =>
+    roundNameOf(q.roundId).trim().toLowerCase().includes("emoji") || Boolean(q.emojiClue);
+  const isTabooRound = (q: PublicQuestion) =>
+    roundNameOf(q.roundId).trim().toLowerCase().includes("taboo") || Boolean(q.tabooWords && q.tabooWords.length > 0);
   const blurbFor = (name: string) => ROUND_BLURBS[name.trim().toLowerCase()] ?? "Answer the questions in this round.";
   const countInSet = (setId: string) => quiz?.questions.filter((q) => q.setId === setId).length ?? 0;
 
@@ -573,15 +577,95 @@ export default function ParticipantPage() {
         />
       </div>
 
-      <div className={`${cardClass} space-y-5 p-5 sm:p-8`}>
-        <h2 className="text-2xl font-bold leading-snug tracking-tight sm:text-3xl">{currentQuestion.text}</h2>
+      <div className={`${cardClass} space-y-6 p-5 sm:p-8`}>
+        {/* Round 2 — Emoji Tech Guess */}
+        {isEmojiRound(currentQuestion) ? (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-cyan-400/30 bg-cyan-500/[0.04] p-6 text-center shadow-lg">
+              <span className="rounded-md bg-cyan-400/20 px-2.5 py-1 font-mono text-xs font-bold uppercase tracking-wider text-cyan-300">
+                Round 2 — Emoji Tech Guess
+              </span>
+              <p className="mt-4 text-4xl sm:text-6xl font-extrabold tracking-widest py-3 select-none">
+                {currentQuestion.emojiClue || currentQuestion.text}
+              </p>
+              <p className="mt-2 text-xs text-neutral-400 font-mono">
+                Decode the technology term represented by this emoji sequence
+              </p>
+            </div>
+          </div>
+        ) : isTabooRound(currentQuestion) ? (
+          /* Round 3 — Tech Taboo */
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/[0.04] p-5 sm:p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-red-500/20 pb-2.5">
+              <span className="rounded-md bg-red-500/20 px-2.5 py-1 font-mono text-xs font-bold uppercase tracking-wider text-red-300">
+                Round 3 — Tech Taboo Card
+              </span>
+              {(currentQuestion.cardReference || currentQuestion.imageUrl) && (
+                <button
+                  type="button"
+                  onClick={() => setZoomImage(currentQuestion.cardReference || currentQuestion.imageUrl)}
+                  className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-cyan-300 transition"
+                >
+                  <span>View original card</span>
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0 0l-5-5m-7 11l-5 5m0 0h4m-4 0v-4m16 4v-4m0 4h-4m4 0l-5-5" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <div>
+              <span className="font-mono text-xs uppercase tracking-wider text-neutral-400">Target Tech Word:</span>
+              <h3 className="text-3xl font-black text-cyan-300 tracking-tight mt-0.5">
+                {currentQuestion.targetWord || currentQuestion.text}
+              </h3>
+            </div>
+            <div>
+              <p className="font-mono text-xs uppercase tracking-wider text-red-400 font-bold mb-2">
+                🚫 Forbidden Words (You cannot say these!):
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {currentQuestion.tabooWords && currentQuestion.tabooWords.length > 0 ? (
+                  currentQuestion.tabooWords.map((w) => (
+                    <span key={w} className="rounded-lg border border-red-400/40 bg-red-500/15 px-3 py-1 font-mono text-sm font-bold text-red-200">
+                      🚫 {w}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-neutral-500">None configured</span>
+                )}
+              </div>
+            </div>
+            {(currentQuestion.cardReference || currentQuestion.imageUrl) && (
+              <div
+                className="overflow-hidden rounded-xl border border-white/10 bg-neutral-900 cursor-zoom-in"
+                onClick={() => setZoomImage(currentQuestion.cardReference || currentQuestion.imageUrl)}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={currentQuestion.cardReference || currentQuestion.imageUrl}
+                  alt="Taboo card visual"
+                  className="mx-auto max-h-40 w-full object-contain"
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Round 1 — AI Quick Q&A */
+          <div className="space-y-3">
+            <span className="inline-block rounded bg-violet-500/20 px-2.5 py-0.5 font-mono text-xs font-semibold text-violet-300">
+              Round 1 — AI Quick Q&A
+            </span>
+            <h2 className="text-2xl font-bold leading-snug tracking-tight sm:text-3xl">{currentQuestion.text}</h2>
+          </div>
+        )}
 
-        {currentQuestion.imageUrl && (
+        {/* Visual attachment if present (for non-taboo or custom questions) */}
+        {currentQuestion.imageUrl && !isTabooRound(currentQuestion) && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1.5 text-xs font-mono font-medium uppercase tracking-wider text-cyan-300">
                 <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
-                Visual Clue Attached
+                Visual Attached
               </span>
               <button
                 type="button"
@@ -608,28 +692,8 @@ export default function ParticipantPage() {
           </div>
         )}
 
-        {isImageRound(currentQuestion) ? (
-          <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Answer choices">
-            {IMAGE_CHOICES.map((choice) => {
-              const active = input === choice;
-              return (
-                <button
-                  key={choice}
-                  type="button"
-                  disabled={locked || checking}
-                  aria-pressed={active}
-                  onClick={() => setInput(choice)}
-                  className={`rounded-xl border px-5 py-4 text-left text-base font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed ${active
-                    ? "border-cyan-300 bg-cyan-300/10 text-cyan-200"
-                    : "border-white/10 bg-neutral-900 hover:border-violet-400/60"
-                    } ${locked && !active ? "opacity-50" : ""}`}
-                >
-                  {choice}
-                </button>
-              );
-            })}
-          </div>
-        ) : currentQuestion.options && currentQuestion.options.length > 0 ? (
+        {/* Answer input */}
+        {currentQuestion.options && currentQuestion.options.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Multiple choice options">
             {currentQuestion.options.map((option) => {
               const active = input === option;
@@ -658,7 +722,13 @@ export default function ParticipantPage() {
             <input
               id="answer"
               className={inputClass}
-              placeholder="Type your answer here..."
+              placeholder={
+                isEmojiRound(currentQuestion)
+                  ? "Type the technology term (e.g. Cloud Computing)..."
+                  : isTabooRound(currentQuestion)
+                    ? "Type the target word to submit..."
+                    : "Type your one-word AI answer..."
+              }
               autoComplete="off"
               disabled={locked || checking}
               value={input}

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { IMAGE_ROUND_NAME, loadQuiz, recordSubmission } from "@/lib/quiz-store";
+import { loadQuiz, recordSubmission } from "@/lib/quiz-store";
 
 function normalize(value: string): string {
   return value
@@ -7,13 +7,6 @@ function normalize(value: string): string {
     .replace(/[^a-z0-9\s-]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function canonicalChoice(value: string): string {
-  const n = normalize(value);
-  if (n.startsWith("real") || n.includes("photo")) return "real";
-  if (n.startsWith("ai") || n.includes("gen")) return "ai";
-  return n;
 }
 
 export async function POST(request: Request) {
@@ -51,14 +44,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Question not found." }, { status: 404 });
   }
 
-  const round = quiz.rounds.find((r) => r.id === question.roundId);
-  const isImageRound = round?.name.trim().toLowerCase() === IMAGE_ROUND_NAME;
-  const prepare = isImageRound ? canonicalChoice : normalize;
-
-  const given = prepare(answer);
+  const given = normalize(answer);
   const accepted = question.answer
     .split("|")
-    .map((a) => prepare(a))
+    .map((a) => normalize(a))
     .filter((a) => a !== "");
 
   const correct = given !== "" && accepted.includes(given);

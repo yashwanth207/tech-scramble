@@ -3,54 +3,52 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
-import { buildDefaultQuiz, INITIAL_ROUNDS, INITIAL_SETS } from "@/lib/quiz-data";
+import {
+  buildDefaultQuiz,
+  INITIAL_ROUNDS,
+  INITIAL_SETS,
+  StoredQuestion,
+  StoredQuiz,
+  StoredRound,
+  StoredSet,
+} from "@/lib/quiz-data";
 
 /* ---------- Types ---------- */
 
-type Section = "overview" | "sets" | "rounds" | "questions" | "settings";
+type Section =
+  | "overview"
+  | "sets"
+  | "rounds"
+  | "questions"
+  | "unassigned"
+  | "review"
+  | "settings";
 
-interface QuestionSet {
-  id: string;
-  name: string;
-}
-
-interface Round {
-  id: string;
-  name: string;
-}
-
-interface Question {
-  id: string;
-  setId: string;
-  roundId: string;
-  text: string;
-  answer: string;
-  marks: number;
-  timer: number;
-  imageUrl: string;
-  options?: string[];
-  targetWord?: string;
-  tabooWords?: string[];
-}
+type QuestionSet = StoredSet;
+type Round = StoredRound;
+type Question = StoredQuestion;
 
 type ModalState =
   | null
   | { kind: "set"; id?: string }
   | { kind: "round"; id?: string }
-  | { kind: "question"; id?: string };
+  | { kind: "question"; id?: string; isUnassigned?: boolean }
+  | { kind: "move"; id: string; isUnassigned?: boolean }
+  | { kind: "import" };
 
 const initialSets: QuestionSet[] = INITIAL_SETS;
 const initialRounds: Round[] = INITIAL_ROUNDS;
 
-function buildInitialQuestions(): Question[] {
-  return buildDefaultQuiz().questions;
+function buildInitialData(): StoredQuiz {
+  return buildDefaultQuiz();
 }
 
 /* ---------- Shared styles ---------- */
 
 const inputClass =
   "w-full rounded-lg border border-white/10 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-300";
-const labelClass = "mb-1 block font-mono text-xs uppercase tracking-widest text-neutral-400";
+const labelClass =
+  "mb-1 block font-mono text-xs uppercase tracking-widest text-neutral-400";
 const primaryBtn =
   "rounded-lg bg-gradient-to-r from-violet-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-neutral-950 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-40";
 const ghostBtn =
@@ -59,14 +57,26 @@ const smallBtn =
   "rounded-md border border-white/10 px-2.5 py-1 text-xs font-medium text-neutral-200 transition hover:border-cyan-300 hover:text-cyan-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300";
 const dangerBtn =
   "rounded-md border border-red-400/30 px-2.5 py-1 text-xs font-medium text-red-300 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400";
+const successBtn =
+  "rounded-md border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20";
 const cardClass = "rounded-2xl border border-white/10 bg-white/[0.03]";
 
-/* ---------- Modal & Sub-components ---------- */
+/* ---------- Modal Component ---------- */
 
-function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+function Modal({
+  title,
+  children,
+  onClose,
+  maxWidth = "max-w-lg",
+}: {
+  title: string;
+  children: ReactNode;
+  onClose: () => void;
+  maxWidth?: string;
+}) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
       onClick={onClose}
       role="presentation"
     >
@@ -74,12 +84,17 @@ function Modal({ title, children, onClose }: { title: string; children: ReactNod
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/15 bg-neutral-950 p-6 shadow-2xl"
+        className={`max-h-[92vh] w-full ${maxWidth} overflow-y-auto rounded-2xl border border-white/15 bg-neutral-950 p-6 shadow-2xl`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between border-b border-white/10 pb-3">
           <h2 className="text-xl font-bold tracking-tight text-white">{title}</h2>
-          <button type="button" onClick={onClose} className={smallBtn} aria-label="Close dialog">
+          <button
+            type="button"
+            onClick={onClose}
+            className={smallBtn}
+            aria-label="Close dialog"
+          >
             Close
           </button>
         </div>
@@ -148,8 +163,8 @@ type QuestionDraft = Omit<Question, "id">;
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-const AI_OR_REAL_ROUND_NAME = "ai or real image";
-const TECH_TABOO_ROUND_NAME = "tech taboo";
+
+/* ---------- Question Form Component (Round-Tailored) ---------- */
 
 function QuestionForm({
   title,
@@ -174,9 +189,6 @@ function QuestionForm({
   const [tabooInput, setTabooInput] = useState(
     Array.isArray(initial.tabooWords) ? initial.tabooWords.join(", ") : "",
   );
-  const [optionsInput, setOptionsInput] = useState(
-    Array.isArray(initial.options) ? initial.options.join("\n") : "",
-  );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -185,8 +197,10 @@ function QuestionForm({
 
   const selectedRound = rounds.find((r) => r.id === draft.roundId);
   const roundLower = selectedRound?.name.trim().toLowerCase() ?? "";
-  const isImageRound = roundLower === AI_OR_REAL_ROUND_NAME;
-  const isTabooRound = roundLower.includes(TECH_TABOO_ROUND_NAME);
+
+  const isR1 = roundLower.includes("quick") || roundLower.includes("q&a") || draft.roundId === "r1";
+  const isR2 = roundLower.includes("emoji") || draft.roundId === "r2";
+  const isR3 = roundLower.includes("taboo") || draft.roundId === "r3";
 
   useEffect(() => {
     return () => {
@@ -200,13 +214,16 @@ function QuestionForm({
     if (!file) return;
     setUploadError("");
     const isExtValid = /\.(jpe?g|png|webp)$/i.test(file.name);
-    const isMimeValid = ALLOWED_IMAGE_TYPES.includes(file.type) || file.type.startsWith("image/");
+    const isMimeValid =
+      ALLOWED_IMAGE_TYPES.includes(file.type) || file.type.startsWith("image/");
     if (!isExtValid && !isMimeValid) {
       setUploadError("Only JPG, JPEG, PNG or WebP images are allowed.");
       return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      setUploadError(`Image is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum size is 4 MB.`);
+      setUploadError(
+        `Image is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum size is 4 MB.`,
+      );
       return;
     }
     setPendingFile(file);
@@ -217,16 +234,33 @@ function QuestionForm({
     setPendingFile(null);
     setPreviewUrl("");
     setUploadError("");
-    setDraft((d) => ({ ...d, imageUrl: "" }));
+    setDraft((d) => ({ ...d, imageUrl: "", cardReference: "" }));
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (saving) return;
-    if (!draft.text.trim()) {
+
+    if (isR2 && !draft.emojiClue?.trim() && !draft.text.trim()) {
+      setError("Please provide an Emoji Clue sequence for Round 2.");
+      return;
+    }
+
+    if (isR3 && !draft.targetWord?.trim() && !draft.answer.trim()) {
+      setError("Please provide the Target Word for Tech Taboo.");
+      return;
+    }
+
+    if (!isR2 && !isR3 && !draft.text.trim()) {
       setError("Please enter the question text.");
       return;
     }
+
+    if (!draft.answer.trim() && !draft.targetWord?.trim()) {
+      setError("Please provide the correct answer or target word.");
+      return;
+    }
+
     if (!Number.isFinite(draft.marks) || draft.marks < 0) {
       setError("Marks must be 0 or more.");
       return;
@@ -254,7 +288,10 @@ function QuestionForm({
           headers: { "x-admin-key": uploadKey.trim() },
           body,
         });
-        const data = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
+        const data = (await res.json().catch(() => null)) as {
+          url?: string;
+          error?: string;
+        } | null;
         if (!res.ok || !data?.url) {
           setUploadError(data?.error ?? `Upload failed (HTTP ${res.status}).`);
           setSaving(false);
@@ -270,39 +307,43 @@ function QuestionForm({
     }
 
     // Parse taboo words
-    const tabooWords = isTabooRound
+    const tabooWords = isR3
       ? tabooInput
-        .split(/[,;\n]/)
-        .map((w) => w.trim())
-        .filter(Boolean)
+          .split(/[,;\n]/)
+          .map((w) => w.trim())
+          .filter(Boolean)
       : undefined;
 
-    // Parse options
-    const options = optionsInput
-      .split("\n")
-      .map((o) => o.trim())
-      .filter(Boolean);
+    const answer = draft.answer.trim() || draft.targetWord?.trim() || "";
+    const targetWord = isR3 ? (draft.targetWord?.trim() || answer) : undefined;
+    const text = isR2
+      ? draft.text.trim() || draft.emojiClue?.trim() || "Emoji Tech Clue"
+      : draft.text.trim() || (targetWord ? `Describe: ${targetWord}` : "");
 
     onSave({
       ...draft,
-      text: draft.text.trim(),
-      answer: draft.answer.trim(),
-      imageUrl,
-      targetWord: isTabooRound ? (draft.targetWord?.trim() || draft.answer.trim()) : undefined,
+      text,
+      answer,
+      targetWord,
       tabooWords: tabooWords && tabooWords.length > 0 ? tabooWords : undefined,
-      options: options.length > 0 ? options : undefined,
+      emojiClue: isR2 ? draft.emojiClue?.trim() : undefined,
+      cardReference: draft.cardReference?.trim() || imageUrl || undefined,
+      imageUrl: imageUrl || draft.cardReference?.trim() || "",
+      flaggedForReview: draft.flaggedForReview || undefined,
+      reviewNotes: draft.reviewNotes?.trim() || undefined,
     });
   }
 
-  const shownImage = previewUrl || draft.imageUrl;
+  const shownImage = previewUrl || draft.cardReference || draft.imageUrl;
 
   return (
-    <Modal title={title} onClose={onClose}>
+    <Modal title={title} onClose={onClose} maxWidth="max-w-xl">
       <form onSubmit={submit} className="space-y-4">
+        {/* Set & Round selectors */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="q-set" className={labelClass}>
-              Set
+              Target Set
             </label>
             <select
               id="q-set"
@@ -310,6 +351,7 @@ function QuestionForm({
               value={draft.setId}
               onChange={(e) => setDraft({ ...draft, setId: e.target.value })}
             >
+              <option value="unassigned">— Unassigned Question Bank —</option>
               {sets.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -319,7 +361,7 @@ function QuestionForm({
           </div>
           <div>
             <label htmlFor="q-round" className={labelClass}>
-              Round
+              Round Category
             </label>
             <select
               id="q-round"
@@ -336,26 +378,91 @@ function QuestionForm({
           </div>
         </div>
 
-        <div>
-          <label htmlFor="q-text" className={labelClass}>
-            Question text / Clue
-          </label>
-          <textarea
-            id="q-text"
-            rows={3}
-            className={inputClass}
-            value={draft.text}
-            onChange={(e) => setDraft({ ...draft, text: e.target.value })}
-            placeholder="Enter the question or clue description"
-          />
-        </div>
+        {/* Round 1: AI Quick Q&A Fields */}
+        {isR1 && (
+          <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/[0.04] p-4 space-y-3">
+            <span className="rounded bg-cyan-500/20 px-2 py-0.5 font-mono text-xs font-bold text-cyan-300">
+              Round 1 — AI Quick Q&A
+            </span>
+            <div>
+              <label htmlFor="q-text" className={labelClass}>
+                Question / Prompt
+              </label>
+              <textarea
+                id="q-text"
+                rows={2}
+                className={inputClass}
+                value={draft.text}
+                onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+                placeholder="e.g. Which test checks if a machine can exhibit human-like intelligence?"
+              />
+            </div>
+            <div>
+              <label htmlFor="q-answer" className={labelClass}>
+                Correct Answer (Short / One-Word)
+              </label>
+              <input
+                id="q-answer"
+                className={inputClass}
+                value={draft.answer}
+                onChange={(e) => setDraft({ ...draft, answer: e.target.value })}
+                placeholder="e.g. Turing Test (use | for alternates like Turing Test|Turing)"
+              />
+              <p className="mt-1 text-[11px] text-neutral-400">
+                Separate accepted alternates with | (e.g. GPU|Graphics Processing Unit).
+              </p>
+            </div>
+          </div>
+        )}
 
-        {/* Taboo Specific Fields */}
-        {isTabooRound && (
+        {/* Round 2: Emoji Tech Guess Fields */}
+        {isR2 && (
+          <div className="rounded-xl border border-violet-500/30 bg-violet-500/[0.04] p-4 space-y-3">
+            <span className="rounded bg-violet-500/20 px-2 py-0.5 font-mono text-xs font-bold text-violet-300">
+              Round 2 — Emoji Tech Guess
+            </span>
+            <div>
+              <label htmlFor="q-emoji" className={labelClass}>
+                Emoji Sequence / Clue
+              </label>
+              <input
+                id="q-emoji"
+                className={`${inputClass} text-xl`}
+                value={draft.emojiClue ?? draft.text}
+                onChange={(e) =>
+                  setDraft({ ...draft, emojiClue: e.target.value, text: e.target.value })
+                }
+                placeholder="e.g. ☁️ + 💻 or 🧠 + 🤖"
+              />
+            </div>
+            <div>
+              <label htmlFor="q-emoji-answer" className={labelClass}>
+                Correct Tech Term / Answer
+              </label>
+              <input
+                id="q-emoji-answer"
+                className={inputClass}
+                value={draft.answer}
+                onChange={(e) => setDraft({ ...draft, answer: e.target.value })}
+                placeholder="e.g. Cloud Computing or Artificial Intelligence"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Round 3: Tech Taboo Fields */}
+        {isR3 && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/[0.04] p-4 space-y-3">
-            <p className="font-mono text-xs uppercase tracking-wider text-red-300 font-bold">
-              Tech Taboo Rules
-            </p>
+            <div className="flex items-center justify-between">
+              <span className="rounded bg-red-500/20 px-2 py-0.5 font-mono text-xs font-bold text-red-300">
+                Round 3 — Tech Taboo / Forbidden Words
+              </span>
+              {draft.flaggedForReview && (
+                <span className="rounded bg-amber-500/20 px-2 py-0.5 font-mono text-xs font-bold text-amber-300">
+                  ⚠️ Review Flag Active
+                </span>
+              )}
+            </div>
             <div>
               <label htmlFor="q-target" className={labelClass}>
                 Target Word (Word team must guess)
@@ -365,14 +472,18 @@ function QuestionForm({
                 className={inputClass}
                 value={draft.targetWord ?? draft.answer}
                 onChange={(e) =>
-                  setDraft({ ...draft, targetWord: e.target.value, answer: e.target.value })
+                  setDraft({
+                    ...draft,
+                    targetWord: e.target.value,
+                    answer: e.target.value,
+                  })
                 }
-                placeholder="e.g. Python"
+                placeholder="e.g. Keyboard"
               />
             </div>
             <div>
               <label htmlFor="q-taboo" className={labelClass}>
-                Prohibited / Taboo Clue Words (comma or newline separated)
+                Forbidden Words (Comma or newline separated)
               </label>
               <textarea
                 id="q-taboo"
@@ -380,67 +491,63 @@ function QuestionForm({
                 className={inputClass}
                 value={tabooInput}
                 onChange={(e) => setTabooInput(e.target.value)}
-                placeholder="e.g. Snake, Programming, Language, Guido, Code"
+                placeholder="e.g. keys, type, computer, letters"
               />
               <p className="mt-1 text-[11px] text-neutral-400">
                 These words cannot be spoken by the clue giver during the round.
               </p>
             </div>
-          </div>
-        )}
-
-        <div>
-          <label htmlFor="q-answer" className={labelClass}>
-            Correct Answer
-          </label>
-          {isImageRound ? (
-            <select
-              id="q-answer"
-              className={inputClass}
-              value={draft.answer}
-              onChange={(e) => setDraft({ ...draft, answer: e.target.value })}
-            >
-              <option value="">Choose the correct answer</option>
-              <option value="Real photo">Real photo</option>
-              <option value="AI-generated">AI-generated</option>
-            </select>
-          ) : (
-            <>
+            <div>
+              <label htmlFor="q-card-ref" className={labelClass}>
+                Card Image Reference (e.g. /taboo/card-1.jpg)
+              </label>
               <input
-                id="q-answer"
+                id="q-card-ref"
                 className={inputClass}
-                value={draft.answer}
-                onChange={(e) => setDraft({ ...draft, answer: e.target.value })}
-                placeholder="e.g. Rizz or Python"
+                value={draft.cardReference ?? draft.imageUrl}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    cardReference: e.target.value,
+                    imageUrl: e.target.value,
+                  })
+                }
+                placeholder="e.g. /taboo/card-1.jpg"
               />
-              <p className="mt-1 text-xs text-neutral-500">
-                To accept alternate spellings, separate them with | (e.g. flex|flexing).
-              </p>
-            </>
-          )}
-        </div>
-
-        {/* Optional Multiple Choice Options */}
-        {!isImageRound && (
-          <div>
-            <label htmlFor="q-options" className={labelClass}>
-              Multiple Choice Options (Optional, one per line)
-            </label>
-            <textarea
-              id="q-options"
-              rows={2}
-              className={inputClass}
-              value={optionsInput}
-              onChange={(e) => setOptionsInput(e.target.value)}
-              placeholder="Leave empty for open text input, or list choices one per line"
-            />
+            </div>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.05] p-3 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="rounded border-white/20 bg-neutral-900 text-amber-400"
+                  checked={Boolean(draft.flaggedForReview)}
+                  onChange={(e) =>
+                    setDraft({ ...draft, flaggedForReview: e.target.checked })
+                  }
+                />
+                <span className="font-mono text-xs font-bold text-amber-300">
+                  Flag row for manual admin review (uncertain OCR / cropped text)
+                </span>
+              </label>
+              {draft.flaggedForReview && (
+                <input
+                  className={inputClass}
+                  placeholder="Review notes (e.g. Cropped 4th forbidden word in screenshot)"
+                  value={draft.reviewNotes ?? ""}
+                  onChange={(e) =>
+                    setDraft({ ...draft, reviewNotes: e.target.value })
+                  }
+                />
+              )}
+            </div>
           </div>
         )}
 
+        {/* Marks and Timer */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="q-marks" className={labelClass}>
-              Marks
+              Marks / Points
             </label>
             <input
               id="q-marks"
@@ -448,7 +555,9 @@ function QuestionForm({
               min={0}
               className={inputClass}
               value={Number.isFinite(draft.marks) ? draft.marks : ""}
-              onChange={(e) => setDraft({ ...draft, marks: e.target.valueAsNumber })}
+              onChange={(e) =>
+                setDraft({ ...draft, marks: e.target.valueAsNumber })
+              }
             />
           </div>
           <div>
@@ -461,69 +570,73 @@ function QuestionForm({
               min={5}
               className={inputClass}
               value={Number.isFinite(draft.timer) ? draft.timer : ""}
-              onChange={(e) => setDraft({ ...draft, timer: e.target.valueAsNumber })}
+              onChange={(e) =>
+                setDraft({ ...draft, timer: e.target.valueAsNumber })
+              }
             />
           </div>
         </div>
 
-        {/* Image Attachment (For Round 1 TikTok memes, Round 2 AI/Real, or any visual question) */}
+        {/* Optional Image Attachment */}
         <div className="space-y-3 rounded-xl border border-white/10 p-4">
           <div className="flex items-center justify-between">
-            <p className={labelClass}>Question Image Visual (Round 1 & 2 Visuals)</p>
+            <p className={labelClass}>Visual Asset / Card Image</p>
             {shownImage && (
               <span className="rounded bg-cyan-500/20 px-2 py-0.5 font-mono text-[10px] text-cyan-300">
-                Image Active
+                Image Attached
               </span>
             )}
           </div>
-          <p className="text-xs text-neutral-400">
-            Attach an image clue for Round 1 (TikTok trends & memes), Round 2 (AI vs Real), or any visual question.
-          </p>
           {shownImage && (
             <div className="space-y-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={shownImage}
-                alt="Question visual preview"
-                className="max-h-48 w-full rounded-lg border border-white/10 bg-neutral-900 object-contain"
+                alt="Visual preview"
+                className="max-h-40 w-full rounded-lg border border-white/10 bg-neutral-900 object-contain"
               />
-              <p className="text-xs text-neutral-400">
-                {pendingFile ? "New file ready. Uploads on Save." : "Saved image reference."}
-              </p>
-              <button type="button" className={dangerBtn} onClick={removeImage}>
+              <button
+                type="button"
+                className={dangerBtn}
+                onClick={removeImage}
+              >
                 Remove Image
               </button>
             </div>
           )}
           <div className="space-y-2">
             <div>
-              <label htmlFor="q-image" className={labelClass}>
-                {shownImage ? "Replace image file" : "Upload image file"} (JPG, PNG, WebP max 4 MB)
+              <label htmlFor="q-image-file" className={labelClass}>
+                {shownImage ? "Replace image file" : "Upload new image"}
               </label>
               <input
-                id="q-image"
+                id="q-image-file"
                 type="file"
                 accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                 disabled={saving}
                 onChange={handleFile}
-                className="block w-full text-sm text-neutral-300 file:mr-3 file:rounded-md file:border-0 file:bg-violet-500/30 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-violet-500/50"
+                className="block w-full text-xs text-neutral-300 file:mr-3 file:rounded-md file:border-0 file:bg-violet-500/30 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-violet-500/50"
               />
             </div>
             <div>
-              <label htmlFor="q-image-url" className={labelClass}>
-                Or direct Image URL / Path
+              <label htmlFor="q-image-url-alt" className={labelClass}>
+                Or direct URL / path
               </label>
               <input
-                id="q-image-url"
+                id="q-image-url-alt"
                 type="text"
                 className={inputClass}
-                value={draft.imageUrl}
+                value={draft.imageUrl || draft.cardReference || ""}
                 onChange={(e) => {
                   setPendingFile(null);
                   setPreviewUrl("");
-                  setDraft({ ...draft, imageUrl: e.target.value });
+                  setDraft({
+                    ...draft,
+                    imageUrl: e.target.value,
+                    cardReference: e.target.value,
+                  });
                 }}
-                placeholder="e.g. /uploads/image.png or https://..."
+                placeholder="e.g. /taboo/card-1.jpg or /uploads/..."
               />
             </div>
           </div>
@@ -544,9 +657,275 @@ function QuestionForm({
   );
 }
 
-function SummaryCard({ label, value, note }: { label: string; value: number; note: string }) {
+/* ---------- Move Question Modal ---------- */
+
+function MoveQuestionModal({
+  question,
+  sets,
+  rounds,
+  onMove,
+  onClose,
+}: {
+  question: Question;
+  sets: QuestionSet[];
+  rounds: Round[];
+  onMove: (targetSetId: string, targetRoundId: string) => void;
+  onClose: () => void;
+}) {
+  const [targetSetId, setTargetSetId] = useState(
+    question.setId === "unassigned" ? sets[0]?.id ?? "s1" : question.setId,
+  );
+  const [targetRoundId, setTargetRoundId] = useState(question.roundId);
+  const [isUnassigned, setIsUnassigned] = useState(question.setId === "unassigned");
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (isUnassigned) {
+      onMove("unassigned", targetRoundId);
+    } else {
+      onMove(targetSetId, targetRoundId);
+    }
+  }
+
   return (
-    <div className={`${cardClass} p-5`}>
+    <Modal title="Move Question" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm">
+          <p className="font-semibold text-white">
+            {question.targetWord || question.emojiClue || question.text || "Question"}
+          </p>
+          <p className="mt-1 font-mono text-xs text-neutral-400">
+            Current: {question.setId === "unassigned" ? "Unassigned Bank" : question.setId} · {question.roundId}
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="rounded border-white/20 bg-neutral-900 text-cyan-400"
+              checked={isUnassigned}
+              onChange={(e) => setIsUnassigned(e.target.checked)}
+            />
+            <span className="text-sm font-semibold text-neutral-200">
+              Move to Unassigned Question Bank (Reserve)
+            </span>
+          </label>
+        </div>
+
+        {!isUnassigned && (
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="move-set" className={labelClass}>
+                Destination Set
+              </label>
+              <select
+                id="move-set"
+                className={inputClass}
+                value={targetSetId}
+                onChange={(e) => setTargetSetId(e.target.value)}
+              >
+                {sets.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="move-round" className={labelClass}>
+                Destination Round
+              </label>
+              <select
+                id="move-round"
+                className={inputClass}
+                value={targetRoundId}
+                onChange={(e) => setTargetRoundId(e.target.value)}
+              >
+                {rounds.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 border-t border-white/10 pt-3">
+          <button type="button" onClick={onClose} className={ghostBtn}>
+            Cancel
+          </button>
+          <button type="submit" className={primaryBtn}>
+            Confirm Move
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/* ---------- Import & Review Modal ---------- */
+
+function ImportReviewModal({
+  currentSets,
+  currentRounds,
+  onImportConfirm,
+  onClose,
+}: {
+  currentSets: QuestionSet[];
+  currentRounds: Round[];
+  onImportConfirm: (imported: StoredQuiz) => void;
+  onClose: () => void;
+}) {
+  const [jsonText, setJsonText] = useState("");
+  const [parsed, setParsed] = useState<StoredQuiz | null>(null);
+  const [parseError, setParseError] = useState("");
+
+  function analyze(text: string) {
+    setJsonText(text);
+    setParseError("");
+    setParsed(null);
+    if (!text.trim()) return;
+    try {
+      const data = JSON.parse(text) as StoredQuiz;
+      if (!Array.isArray(data.sets) || !Array.isArray(data.rounds) || !Array.isArray(data.questions)) {
+        setParseError("JSON must contain sets, rounds, and questions arrays.");
+        return;
+      }
+      setParsed(data);
+    } catch {
+      setParseError("Invalid JSON syntax.");
+    }
+  }
+
+  const validationChecks = useMemo(() => {
+    if (!parsed) return null;
+    const issues: string[] = [];
+    for (const s of parsed.sets) {
+      for (const r of parsed.rounds) {
+        const count = parsed.questions.filter((q) => q.setId === s.id && q.roundId === r.id).length;
+        if (count !== 5) {
+          issues.push(`${s.name} → ${r.name}: has ${count} questions (must be 5)`);
+        }
+      }
+    }
+    const flaggedCount =
+      parsed.questions.filter((q) => q.flaggedForReview).length +
+      (parsed.unassignedQuestions?.filter((q) => q.flaggedForReview).length ?? 0);
+
+    return {
+      issues,
+      isValid: issues.length === 0,
+      assignedCount: parsed.questions.length,
+      unassignedCount: parsed.unassignedQuestions?.length ?? 0,
+      flaggedCount,
+    };
+  }, [parsed]);
+
+  return (
+    <Modal title="Import & Review Quiz Content" onClose={onClose} maxWidth="max-w-2xl">
+      <div className="space-y-4">
+        <p className="text-sm text-neutral-300">
+          Paste the quiz JSON below to inspect and validate before saving. Rounds will be verified to have exactly 5 questions each.
+        </p>
+
+        <div>
+          <label htmlFor="import-json" className={labelClass}>
+            Quiz JSON Payload
+          </label>
+          <textarea
+            id="import-json"
+            rows={6}
+            className={`${inputClass} font-mono text-xs`}
+            value={jsonText}
+            onChange={(e) => analyze(e.target.value)}
+            placeholder='{"sets": [...], "rounds": [...], "questions": [...], "unassignedQuestions": [...]}'
+          />
+        </div>
+
+        {parseError && <p className="text-xs text-red-300">{parseError}</p>}
+
+        {validationChecks && (
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
+            <h3 className="font-bold text-white text-sm">Validation & Inspection Summary</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+              <div className="p-2 rounded bg-black/40">
+                <span className="text-neutral-400 block">Sets</span>
+                <span className="text-white font-bold text-sm">{parsed?.sets.length}</span>
+              </div>
+              <div className="p-2 rounded bg-black/40">
+                <span className="text-neutral-400 block">Rounds</span>
+                <span className="text-white font-bold text-sm">{parsed?.rounds.length}</span>
+              </div>
+              <div className="p-2 rounded bg-black/40">
+                <span className="text-neutral-400 block">Assigned Qs</span>
+                <span className="text-cyan-300 font-bold text-sm">{validationChecks.assignedCount}</span>
+              </div>
+              <div className="p-2 rounded bg-black/40">
+                <span className="text-neutral-400 block">Unassigned Qs</span>
+                <span className="text-violet-300 font-bold text-sm">{validationChecks.unassignedCount}</span>
+              </div>
+            </div>
+
+            {validationChecks.flaggedCount > 0 && (
+              <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] text-xs text-amber-200">
+                ⚠️ {validationChecks.flaggedCount} item(s) flagged for OCR / manual review.
+              </div>
+            )}
+
+            {validationChecks.issues.length > 0 ? (
+              <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/[0.08] text-xs text-red-200 space-y-1">
+                <p className="font-bold">❌ Validation Blockers (Each round must have exactly 5 questions):</p>
+                <ul className="list-disc pl-5 space-y-0.5">
+                  {validationChecks.issues.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] text-xs text-emerald-200 font-semibold">
+                ✓ All round counts pass! Exactly 5 questions per round per set.
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 border-t border-white/10 pt-3">
+          <button type="button" onClick={onClose} className={ghostBtn}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={primaryBtn}
+            disabled={!parsed || !validationChecks?.isValid}
+            onClick={() => {
+              if (parsed) {
+                onImportConfirm(parsed);
+              }
+            }}
+          >
+            Import & Save to Database
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function SummaryCard({
+  label,
+  value,
+  note,
+  highlight,
+}: {
+  label: string;
+  value: number | string;
+  note: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className={`${cardClass} p-5 ${highlight ? "border-cyan-400/40 bg-cyan-500/[0.03]" : ""}`}>
       <p className="font-mono text-xs uppercase tracking-widest text-neutral-400">{label}</p>
       <p className="mt-3 text-4xl font-extrabold tracking-tight text-white">{value}</p>
       <p className="mt-1 text-xs text-neutral-500">{note}</p>
@@ -554,17 +933,20 @@ function SummaryCard({ label, value, note }: { label: string; value: number; not
   );
 }
 
-/* ---------- Admin Page ---------- */
+/* ---------- Admin Page Component ---------- */
 
 export default function AdminPage() {
   const [section, setSection] = useState<Section>("overview");
   const [sets, setSets] = useState<QuestionSet[]>(initialSets);
   const [rounds, setRounds] = useState<Round[]>(initialRounds);
-  const [questions, setQuestions] = useState<Question[]>(buildInitialQuestions());
-  const [defaultCount, setDefaultCount] = useState<number>(5);
+  const [questions, setQuestions] = useState<Question[]>(() => buildInitialData().questions);
+  const [unassignedQuestions, setUnassignedQuestions] = useState<Question[]>(
+    () => buildInitialData().unassignedQuestions || [],
+  );
 
   const [filterSet, setFilterSet] = useState<string>("all");
   const [filterRound, setFilterRound] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   const [modal, setModal] = useState<ModalState>(null);
   const [uploadKey, setUploadKey] = useState<string>("");
@@ -572,7 +954,11 @@ export default function AdminPage() {
   const [unlocking, setUnlocking] = useState<boolean>(false);
   const [unlockError, setUnlockError] = useState<string>("");
   const [saveState, setSaveState] = useState<
-    { kind: "clean" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string }
+    | { kind: "clean" }
+    | { kind: "saving" }
+    | { kind: "saved" }
+    | { kind: "error"; message: string }
+    | { kind: "validation-blocked"; message: string }
   >({ kind: "clean" });
   const [retryTick, setRetryTick] = useState<number>(0);
   const lastSaved = useRef<string | null>(null);
@@ -585,7 +971,49 @@ export default function AdminPage() {
     return `${prefix}${random}`;
   };
 
-  const snapshot = useMemo(() => JSON.stringify({ sets, rounds, questions }), [sets, rounds, questions]);
+  /* ---------- Validation Guard: Exactly 5 questions per round per set ---------- */
+  const validationReport = useMemo(() => {
+    const issues: {
+      setId: string;
+      setName: string;
+      roundId: string;
+      roundName: string;
+      count: number;
+    }[] = [];
+
+    for (const s of sets) {
+      for (const r of rounds) {
+        const count = questions.filter((q) => q.setId === s.id && q.roundId === r.id).length;
+        if (count !== 5) {
+          issues.push({
+            setId: s.id,
+            setName: s.name,
+            roundId: r.id,
+            roundName: r.name,
+            count,
+          });
+        }
+      }
+    }
+
+    const totalAssigned = questions.length;
+    const isExact60 = totalAssigned === 60;
+    const isValid = issues.length === 0 && sets.length === 4 && rounds.length === 3 && isExact60;
+
+    return { issues, isValid, totalAssigned };
+  }, [sets, rounds, questions]);
+
+  /* ---------- Flagged Review Items (e.g. uncertain OCR) ---------- */
+  const flaggedItems = useMemo(() => {
+    const assigned = questions.filter((q) => q.flaggedForReview);
+    const unassigned = unassignedQuestions.filter((q) => q.flaggedForReview);
+    return [...assigned, ...unassigned];
+  }, [questions, unassignedQuestions]);
+
+  const snapshot = useMemo(
+    () => JSON.stringify({ sets, rounds, questions, unassignedQuestions }),
+    [sets, rounds, questions, unassignedQuestions],
+  );
 
   async function unlock(e: FormEvent) {
     e.preventDefault();
@@ -601,7 +1029,7 @@ export default function AdminPage() {
         cache: "no-store",
       });
       const body = (await res.json().catch(() => null)) as {
-        data?: { sets: QuestionSet[]; rounds: Round[]; questions: Question[] } | null;
+        data?: StoredQuiz | null;
         error?: string;
       } | null;
       if (!res.ok) {
@@ -612,6 +1040,9 @@ export default function AdminPage() {
         setSets(body.data.sets);
         setRounds(body.data.rounds);
         setQuestions(body.data.questions);
+        if (Array.isArray(body.data.unassignedQuestions)) {
+          setUnassignedQuestions(body.data.unassignedQuestions);
+        }
         lastSaved.current = JSON.stringify(body.data);
       } else {
         lastSaved.current = null;
@@ -624,9 +1055,19 @@ export default function AdminPage() {
     }
   }
 
-  // Autosave to database
+  // Persistent save to database with 5-question guard
   useEffect(() => {
     if (!unlocked || snapshot === lastSaved.current) return;
+
+    // Check validation guard: prevent saving if round counts are not exactly 5
+    if (!validationReport.isValid) {
+      setSaveState({
+        kind: "validation-blocked",
+        message: `Validation guard active: Each round in every set must contain exactly 5 questions (${validationReport.totalAssigned}/60 assigned). Autosave paused until resolved.`,
+      });
+      return;
+    }
+
     setSaveState({ kind: "saving" });
     const timer = setTimeout(async () => {
       try {
@@ -647,7 +1088,7 @@ export default function AdminPage() {
       }
     }, 600);
     return () => clearTimeout(timer);
-  }, [unlocked, snapshot, uploadKey, retryTick]);
+  }, [unlocked, snapshot, uploadKey, retryTick, validationReport]);
 
   const setName = (id: string) => sets.find((s) => s.id === id)?.name ?? "Unknown set";
   const roundName = (id: string) => rounds.find((r) => r.id === id)?.name ?? "Unknown round";
@@ -655,18 +1096,20 @@ export default function AdminPage() {
   const activeSetFilter = filterSet === "all" || sets.some((s) => s.id === filterSet) ? filterSet : "all";
   const activeRoundFilter = filterRound === "all" || rounds.some((r) => r.id === filterRound) ? filterRound : "all";
 
-  const visibleQuestions = useMemo(
-    () =>
-      questions.filter(
-        (q) =>
-          (activeSetFilter === "all" || q.setId === activeSetFilter) &&
-          (activeRoundFilter === "all" || q.roundId === activeRoundFilter),
-      ),
-    [questions, activeSetFilter, activeRoundFilter],
-  );
-
   const countFor = (setId: string, roundId?: string) =>
     questions.filter((q) => q.setId === setId && (roundId === undefined || q.roundId === roundId)).length;
+
+  const visibleQuestions = useMemo(() => {
+    return questions.filter((q) => {
+      const matchSet = activeSetFilter === "all" || q.setId === activeSetFilter;
+      const matchRound = activeRoundFilter === "all" || q.roundId === activeRoundFilter;
+      const qText = (q.text + " " + q.answer + " " + (q.targetWord ?? "") + " " + (q.emojiClue ?? "")).toLowerCase();
+      const matchSearch = !searchQuery.trim() || qText.includes(searchQuery.trim().toLowerCase());
+      return matchSet && matchRound && matchSearch;
+    });
+  }, [questions, activeSetFilter, activeRoundFilter, searchQuery]);
+
+  /* ---------- Set / Round Handlers ---------- */
 
   function saveSet(name: string, id?: string) {
     if (id) {
@@ -680,9 +1123,11 @@ export default function AdminPage() {
 
   function deleteSet(id: string) {
     const count = countFor(id);
-    if (!window.confirm(`Delete "${setName(id)}" and its ${count} question(s)?`)) return;
-    setSets((prev) => prev.filter((s) => s.id !== id));
+    if (!window.confirm(`Delete "${setName(id)}" and move its ${count} question(s) to Unassigned Bank?`)) return;
+    const moved = questions.filter((q) => q.setId === id).map((q) => ({ ...q, setId: "unassigned" }));
+    setUnassignedQuestions((prev) => [...prev, ...moved]);
     setQuestions((prev) => prev.filter((q) => q.setId !== id));
+    setSets((prev) => prev.filter((s) => s.id !== id));
   }
 
   function saveRound(name: string, id?: string) {
@@ -697,29 +1142,123 @@ export default function AdminPage() {
 
   function deleteRound(id: string) {
     const count = questions.filter((q) => q.roundId === id).length;
-    if (!window.confirm(`Delete "${roundName(id)}" and its ${count} question(s) across all sets?`)) return;
-    setRounds((prev) => prev.filter((r) => r.id !== id));
+    if (!window.confirm(`Delete "${roundName(id)}" and move its ${count} question(s) to Unassigned Bank?`)) return;
+    const moved = questions.filter((q) => q.roundId === id).map((q) => ({ ...q, setId: "unassigned" }));
+    setUnassignedQuestions((prev) => [...prev, ...moved]);
     setQuestions((prev) => prev.filter((q) => q.roundId !== id));
+    setRounds((prev) => prev.filter((r) => r.id !== id));
   }
 
-  function saveQuestion(draft: QuestionDraft, id?: string) {
-    if (id) {
-      setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, ...draft } : q)));
+  /* ---------- Question CRUD & Reorder Handlers ---------- */
+
+  function saveQuestion(draft: QuestionDraft, id?: string, isUnassigned?: boolean) {
+    if (draft.setId === "unassigned") {
+      if (id) {
+        // Was it in assigned questions or unassigned?
+        if (isUnassigned) {
+          setUnassignedQuestions((prev) =>
+            prev.map((q) => (q.id === id ? { ...q, ...draft, setId: "unassigned" } : q)),
+          );
+        } else {
+          setQuestions((prev) => prev.filter((q) => q.id !== id));
+          setUnassignedQuestions((prev) => [...prev, { id, ...draft, setId: "unassigned" }]);
+        }
+      } else {
+        setUnassignedQuestions((prev) => [...prev, { id: nextId("q"), ...draft, setId: "unassigned" }]);
+      }
     } else {
-      setQuestions((prev) => [...prev, { id: nextId("q"), ...draft }]);
+      if (id) {
+        if (isUnassigned) {
+          setUnassignedQuestions((prev) => prev.filter((q) => q.id !== id));
+          setQuestions((prev) => [...prev, { id, ...draft }]);
+        } else {
+          setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, ...draft } : q)));
+        }
+      } else {
+        setQuestions((prev) => [...prev, { id: nextId("q"), ...draft }]);
+      }
     }
     setModal(null);
   }
 
-  function deleteQuestion(id: string) {
+  function deleteQuestion(id: string, fromUnassigned = false) {
     if (!window.confirm("Delete this question?")) return;
-    setQuestions((prev) => prev.filter((q) => q.id !== id));
+    if (fromUnassigned) {
+      setUnassignedQuestions((prev) => prev.filter((q) => q.id !== id));
+    } else {
+      setQuestions((prev) => prev.filter((q) => q.id !== id));
+    }
   }
 
-  function resetAll() {
+  function moveQuestionToUnassigned(id: string) {
+    const target = questions.find((q) => q.id === id);
+    if (!target) return;
+    setQuestions((prev) => prev.filter((q) => q.id !== id));
+    setUnassignedQuestions((prev) => [...prev, { ...target, setId: "unassigned" }]);
+  }
+
+  function moveQuestionToTarget(id: string, targetSetId: string, targetRoundId: string) {
+    const inAssigned = questions.find((q) => q.id === id);
+    const inUnassigned = unassignedQuestions.find((q) => q.id === id);
+    const item = inAssigned || inUnassigned;
+    if (!item) return;
+
+    if (targetSetId === "unassigned") {
+      if (inAssigned) {
+        setQuestions((prev) => prev.filter((q) => q.id !== id));
+        setUnassignedQuestions((prev) => [...prev, { ...item, setId: "unassigned", roundId: targetRoundId }]);
+      }
+    } else {
+      if (inUnassigned) {
+        setUnassignedQuestions((prev) => prev.filter((q) => q.id !== id));
+        setQuestions((prev) => [...prev, { ...item, setId: targetSetId, roundId: targetRoundId }]);
+      } else {
+        setQuestions((prev) =>
+          prev.map((q) => (q.id === id ? { ...q, setId: targetSetId, roundId: targetRoundId } : q)),
+        );
+      }
+    }
+    setModal(null);
+  }
+
+  function moveQuestionOrder(id: string, direction: "up" | "down") {
+    const index = questions.findIndex((q) => q.id === id);
+    if (index === -1) return;
+    const targetQ = questions[index];
+
+    // Find siblings in the same set and round
+    const siblings = questions
+      .map((q, idx) => ({ q, idx }))
+      .filter((item) => item.q.setId === targetQ.setId && item.q.roundId === targetQ.roundId);
+
+    const siblingPos = siblings.findIndex((item) => item.q.id === id);
+    if (siblingPos === -1) return;
+
+    const swapSiblingPos = direction === "up" ? siblingPos - 1 : siblingPos + 1;
+    if (swapSiblingPos < 0 || swapSiblingPos >= siblings.length) return;
+
+    const swapWithIndex = siblings[swapSiblingPos].idx;
+
+    const copy = [...questions];
+    const temp = copy[index];
+    copy[index] = copy[swapWithIndex];
+    copy[swapWithIndex] = temp;
+    setQuestions(copy);
+  }
+
+  function clearFlagReview(id: string) {
+    setQuestions((prev) =>
+      prev.map((q) => (q.id === id ? { ...q, flaggedForReview: false, reviewNotes: undefined } : q)),
+    );
+    setUnassignedQuestions((prev) =>
+      prev.map((q) => (q.id === id ? { ...q, flaggedForReview: false, reviewNotes: undefined } : q)),
+    );
+  }
+
+  function resetAllToStandard() {
     if (
       !window.confirm(
-        "Reset everything back to 6 sets, 3 rounds and 5 questions each (90 total questions)? This replaces existing saved data.",
+        "Reset everything back to standard quiz structure? (4 sets × 3 rounds × 5 questions = 60 assigned, plus 25 in Unassigned Bank).",
       )
     )
       return;
@@ -727,12 +1266,20 @@ export default function AdminPage() {
     setSets(defaultData.sets);
     setRounds(defaultData.rounds);
     setQuestions(defaultData.questions);
-    setDefaultCount(5);
+    setUnassignedQuestions(defaultData.unassignedQuestions ?? []);
     setFilterSet("all");
     setFilterRound("all");
   }
 
-  const canAddQuestion = sets.length > 0 && rounds.length > 0;
+  function handleImportConfirm(imported: StoredQuiz) {
+    setSets(imported.sets);
+    setRounds(imported.rounds);
+    setQuestions(imported.questions);
+    setUnassignedQuestions(imported.unassignedQuestions ?? []);
+    setModal(null);
+  }
+
+  /* ---------- Render Modals ---------- */
 
   function renderModal() {
     if (!modal) return null;
@@ -765,175 +1312,448 @@ export default function AdminPage() {
       );
     }
 
-    const existing = modal.id ? questions.find((q) => q.id === modal.id) : undefined;
-    const initial: QuestionDraft = existing
-      ? {
-        setId: existing.setId,
-        roundId: existing.roundId,
-        text: existing.text,
-        answer: existing.answer,
-        marks: existing.marks,
-        timer: existing.timer,
-        imageUrl: existing.imageUrl,
-        options: existing.options,
-        targetWord: existing.targetWord,
-        tabooWords: existing.tabooWords,
-      }
-      : {
-        setId: activeSetFilter !== "all" ? activeSetFilter : (sets[0]?.id ?? ""),
-        roundId: activeRoundFilter !== "all" ? activeRoundFilter : (rounds[0]?.id ?? ""),
-        text: "",
-        answer: "",
-        marks: 10,
-        timer: 30,
-        imageUrl: "",
-      };
-    return (
-      <QuestionForm
-        key={modal.id ?? "new-question"}
-        title={existing ? "Edit question" : "Add question"}
-        sets={sets}
-        rounds={rounds}
-        initial={initial}
-        uploadKey={uploadKey}
-        onUploadKeyChange={setUploadKey}
-        onSave={(draft) => saveQuestion(draft, modal.id)}
-        onClose={() => setModal(null)}
-      />
-    );
+    if (modal.kind === "question") {
+      const existing = modal.id
+        ? modal.isUnassigned
+          ? unassignedQuestions.find((q) => q.id === modal.id)
+          : questions.find((q) => q.id === modal.id)
+        : undefined;
+
+      const initial: QuestionDraft = existing
+        ? {
+            setId: existing.setId,
+            roundId: existing.roundId,
+            text: existing.text,
+            answer: existing.answer,
+            marks: existing.marks,
+            timer: existing.timer,
+            imageUrl: existing.imageUrl,
+            targetWord: existing.targetWord,
+            tabooWords: existing.tabooWords,
+            emojiClue: existing.emojiClue,
+            cardReference: existing.cardReference,
+            flaggedForReview: existing.flaggedForReview,
+            reviewNotes: existing.reviewNotes,
+          }
+        : {
+            setId: activeSetFilter !== "all" ? activeSetFilter : (sets[0]?.id ?? "s1"),
+            roundId: activeRoundFilter !== "all" ? activeRoundFilter : (rounds[0]?.id ?? "r1"),
+            text: "",
+            answer: "",
+            marks: 10,
+            timer: 30,
+            imageUrl: "",
+          };
+
+      return (
+        <QuestionForm
+          key={modal.id ?? "new-question"}
+          title={existing ? "Edit question" : "Add question"}
+          sets={sets}
+          rounds={rounds}
+          initial={initial}
+          uploadKey={uploadKey}
+          onUploadKeyChange={setUploadKey}
+          onSave={(draft) => saveQuestion(draft, modal.id, modal.isUnassigned)}
+          onClose={() => setModal(null)}
+        />
+      );
+    }
+
+    if (modal.kind === "move") {
+      const q = modal.isUnassigned
+        ? unassignedQuestions.find((item) => item.id === modal.id)
+        : questions.find((item) => item.id === modal.id);
+      if (!q) return null;
+      return (
+        <MoveQuestionModal
+          key={modal.id}
+          question={q}
+          sets={sets}
+          rounds={rounds}
+          onMove={(targetSet, targetRound) => moveQuestionToTarget(q.id, targetSet, targetRound)}
+          onClose={() => setModal(null)}
+        />
+      );
+    }
+
+    if (modal.kind === "import") {
+      return (
+        <ImportReviewModal
+          currentSets={sets}
+          currentRounds={rounds}
+          onImportConfirm={handleImportConfirm}
+          onClose={() => setModal(null)}
+        />
+      );
+    }
+
+    return null;
   }
 
+  /* ---------- Action Bar ---------- */
+
   const actionBar = (
-    <div className="flex flex-wrap gap-2">
-      <button type="button" className={primaryBtn} onClick={() => setModal({ kind: "set" })}>
-        + Create Set
-      </button>
-      <button type="button" className={ghostBtn} onClick={() => setModal({ kind: "round" })}>
-        + Add Round
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        className={primaryBtn}
+        onClick={() => setModal({ kind: "question" })}
+      >
+        + Add Question
       </button>
       <button
         type="button"
         className={ghostBtn}
-        onClick={() => setModal({ kind: "question" })}
-        disabled={!canAddQuestion}
+        onClick={() => setModal({ kind: "import" })}
       >
-        + Add Question
+        📥 Import & Review
+      </button>
+      <button
+        type="button"
+        className={ghostBtn}
+        onClick={() => setModal({ kind: "set" })}
+      >
+        + Set
+      </button>
+      <button
+        type="button"
+        className={ghostBtn}
+        onClick={() => setModal({ kind: "round" })}
+      >
+        + Round
       </button>
     </div>
   );
 
+  /* ---------- Section 1: Overview ---------- */
+
   const overview = (
     <div className="space-y-8">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <SummaryCard label="Question sets" value={sets.length} note="Sets participants can choose" />
-        <SummaryCard label="Rounds" value={rounds.length} note="Shared across every set" />
-        <SummaryCard label="Total questions" value={questions.length} note="Across all sets and rounds" />
+      {/* 5-Question Validation Guard Banner */}
+      {!validationReport.isValid ? (
+        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/[0.08] p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">⚠️</span>
+            <h3 className="font-bold text-amber-300 text-base tracking-tight">
+              Quiz Structure Validation Alert — 5 Questions Required Per Round
+            </h3>
+          </div>
+          <p className="text-sm text-neutral-200">
+            Each set must contain exactly 3 rounds, and each round must have <strong>EXACTLY 5 QUESTIONS</strong> (total 60 assigned).
+            Currently, {validationReport.totalAssigned} / 60 questions are assigned.
+          </p>
+          <div className="rounded-xl bg-black/40 p-3 font-mono text-xs space-y-1">
+            <p className="font-bold text-amber-200">Discrepancies found:</p>
+            {validationReport.issues.map((iss, idx) => (
+              <p key={idx} className="text-amber-300">
+                • {iss.setName} → {iss.roundName}: has <strong>{iss.count}</strong> questions (needs exactly 5)
+              </p>
+            ))}
+          </div>
+          <p className="text-xs text-neutral-400">
+            Use the Question Editor or Unassigned Bank to reassign questions until all 12 slots have 5 questions.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <p className="font-mono text-xs font-bold uppercase tracking-wider text-emerald-300">
+              Quiz Structure Validated: 4 Sets × 3 Rounds × Exactly 5 Questions = 60 Assigned Slots Total
+            </p>
+          </div>
+          <span className="rounded bg-emerald-400/20 px-2 py-0.5 font-mono text-xs text-emerald-200">
+            {unassignedQuestions.length} reserve in bank
+          </span>
+        </div>
+      )}
+
+      {/* Flagged Review Alert */}
+      {flaggedItems.length > 0 && (
+        <div className="rounded-2xl border border-red-500/40 bg-red-500/[0.06] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <span className="text-lg">🔍</span>
+            <div>
+              <p className="font-bold text-red-200 text-sm">
+                {flaggedItems.length} Question Flagged for Admin OCR / Manual Review
+              </p>
+              <p className="text-xs text-neutral-300 mt-0.5">
+                {flaggedItems[0].reviewNotes ||
+                  "Cropped text in original screenshot requires manual review."}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={smallBtn}
+              onClick={() => {
+                setModal({ kind: "question", id: flaggedItems[0].id, isUnassigned: flaggedItems[0].setId === "unassigned" });
+              }}
+            >
+              Review & Edit
+            </button>
+            <button
+              type="button"
+              className={successBtn}
+              onClick={() => clearFlagReview(flaggedItems[0].id)}
+            >
+              Approve / Clear Flag
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Summary Cards */}
+      <div className="grid gap-4 sm:grid-cols-4">
+        <SummaryCard
+          label="Question Sets"
+          value={sets.length}
+          note="Alpha, Beta, Gamma, Delta"
+        />
+        <SummaryCard
+          label="Rounds"
+          value={rounds.length}
+          note="AI Q&A, Emoji, Tech Taboo"
+        />
+        <SummaryCard
+          label="Assigned Questions"
+          value={`${questions.length} / 60`}
+          note="5 questions per round per set"
+          highlight={questions.length === 60}
+        />
+        <SummaryCard
+          label="Unassigned Question Bank"
+          value={unassignedQuestions.length}
+          note="Reserve questions stored safely"
+        />
       </div>
 
-      <div className={`${cardClass} overflow-x-auto p-5`}>
-        <h2 className="mb-4 text-lg font-bold tracking-tight">Questions per set and round</h2>
-        {sets.length === 0 || rounds.length === 0 ? (
-          <p className="text-sm text-neutral-400">Create at least one set and one round to see this table.</p>
-        ) : (
-          <table className="w-full min-w-[32rem] text-left text-sm">
-            <thead>
-              <tr className="border-b border-white/10 font-mono text-xs uppercase tracking-widest text-neutral-400">
-                <th className="py-2 pr-4">Set</th>
-                {rounds.map((r) => (
-                  <th key={r.id} className="py-2 pr-4">
-                    {r.name}
-                  </th>
-                ))}
-                <th className="py-2">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sets.map((s) => (
-                <tr key={s.id} className="border-b border-white/5">
-                  <td className="py-2 pr-4 font-medium text-white">{s.name}</td>
-                  {rounds.map((r) => (
-                    <td key={r.id} className="py-2 pr-4 text-neutral-300">
-                      {countFor(s.id, r.id)}
-                    </td>
-                  ))}
-                  <td className="py-2 text-cyan-300 font-bold">{countFor(s.id)}</td>
-                </tr>
+      {/* Set × Round Matrix with Clear 5-Question Counters */}
+      <div className={`${cardClass} overflow-x-auto p-5 space-y-4`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold tracking-tight text-white">
+              Questions Matrix (Set → Round → 5 Questions)
+            </h2>
+            <p className="text-xs text-neutral-400 mt-0.5">
+              Target requirement: EXACTLY 5 questions in each round of each set.
+            </p>
+          </div>
+        </div>
+
+        <table className="w-full min-w-[36rem] text-left text-sm border-collapse">
+          <thead>
+            <tr className="border-b border-white/10 font-mono text-xs uppercase tracking-widest text-neutral-400">
+              <th className="py-2.5 pr-4">Set Name</th>
+              {rounds.map((r) => (
+                <th key={r.id} className="py-2.5 pr-4">
+                  {r.name}
+                </th>
               ))}
-            </tbody>
-          </table>
-        )}
+              <th className="py-2.5 text-right">Total Set Questions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sets.map((s) => {
+              const setTotal = countFor(s.id);
+              return (
+                <tr key={s.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                  <td className="py-3 pr-4 font-bold text-white flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                    {s.name}
+                  </td>
+                  {rounds.map((r) => {
+                    const c = countFor(s.id, r.id);
+                    const isFive = c === 5;
+                    return (
+                      <td key={r.id} className="py-3 pr-4 font-mono">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold ${
+                            isFive
+                              ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                              : "bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse"
+                          }`}
+                        >
+                          {c} / 5 questions {isFive ? "✓" : "⚠️"}
+                        </span>
+                      </td>
+                    );
+                  })}
+                  <td className="py-3 text-right font-mono font-bold">
+                    <span
+                      className={`text-sm ${
+                        setTotal === 15 ? "text-cyan-300" : "text-amber-300"
+                      }`}
+                    >
+                      {setTotal} / 15
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 
+  /* ---------- Section 2: Sets View ---------- */
+
   const setsView = (
-    <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {sets.map((s) => (
-        <li key={s.id} className={`${cardClass} p-5`}>
-          <p className="font-mono text-xs uppercase tracking-widest text-neutral-500">Question set</p>
-          <p className="mt-2 text-xl font-bold tracking-tight text-white">{s.name}</p>
-          <p className="mt-1 text-sm text-neutral-400">{countFor(s.id)} questions</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={smallBtn}
-              onClick={() => {
-                setFilterSet(s.id);
-                setFilterRound("all");
-                setSection("questions");
-              }}
-            >
-              View questions
-            </button>
-            <button type="button" className={smallBtn} onClick={() => setModal({ kind: "set", id: s.id })}>
-              Rename
-            </button>
-            <button type="button" className={dangerBtn} onClick={() => deleteSet(s.id)}>
-              Delete
-            </button>
-          </div>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-neutral-400">
+          Exactly 4 sets are configured. Each set must have 15 questions (3 rounds × 5 questions).
+        </p>
+      </div>
+      <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {sets.map((s) => {
+          const count = countFor(s.id);
+          return (
+            <li key={s.id} className={`${cardClass} p-5 space-y-3`}>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-xs uppercase tracking-widest text-neutral-500">
+                  Question Set
+                </span>
+                <span
+                  className={`rounded px-2 py-0.5 font-mono text-xs font-bold ${
+                    count === 15
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : "bg-amber-500/20 text-amber-300"
+                  }`}
+                >
+                  {count} / 15 Qs
+                </span>
+              </div>
+              <p className="text-2xl font-black tracking-tight text-white">{s.name}</p>
+              <div className="space-y-1 text-xs font-mono text-neutral-400 pt-2 border-t border-white/5">
+                {rounds.map((r) => (
+                  <div key={r.id} className="flex justify-between">
+                    <span>{r.name}</span>
+                    <span
+                      className={
+                        countFor(s.id, r.id) === 5 ? "text-cyan-300" : "text-red-300"
+                      }
+                    >
+                      {countFor(s.id, r.id)} / 5
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2 pt-2 border-t border-white/5">
+                <button
+                  type="button"
+                  className={smallBtn}
+                  onClick={() => {
+                    setFilterSet(s.id);
+                    setFilterRound("all");
+                    setSection("questions");
+                  }}
+                >
+                  Filter questions
+                </button>
+                <button
+                  type="button"
+                  className={smallBtn}
+                  onClick={() => setModal({ kind: "set", id: s.id })}
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  className={dangerBtn}
+                  onClick={() => deleteSet(s.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 
+  /* ---------- Section 3: Rounds View ---------- */
+
   const roundsView = (
-    <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {rounds.map((r, i) => (
-        <li key={r.id} className={`${cardClass} p-5`}>
-          <p className="font-mono text-xs uppercase tracking-widest text-cyan-300">Round {i + 1}</p>
-          <p className="mt-2 text-xl font-bold tracking-tight text-white">{r.name}</p>
-          <p className="mt-1 text-sm text-neutral-400">
-            {questions.filter((q) => q.roundId === r.id).length} questions across {sets.length} sets
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={smallBtn}
-              onClick={() => {
-                setFilterRound(r.id);
-                setFilterSet("all");
-                setSection("questions");
-              }}
-            >
-              View questions
-            </button>
-            <button type="button" className={smallBtn} onClick={() => setModal({ kind: "round", id: r.id })}>
-              Rename
-            </button>
-            <button type="button" className={dangerBtn} onClick={() => deleteRound(r.id)}>
-              Delete
-            </button>
-          </div>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-neutral-400">
+          Exactly 3 rounds in sequential order. Each round has 20 assigned questions (5 per set across Alpha, Beta, Gamma, Delta).
+        </p>
+      </div>
+      <ul className="grid gap-4 sm:grid-cols-3">
+        {rounds.map((r, i) => {
+          const count = questions.filter((q) => q.roundId === r.id).length;
+          const unassigned = unassignedQuestions.filter((q) => q.roundId === r.id).length;
+          return (
+            <li key={r.id} className={`${cardClass} p-5 space-y-3`}>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-xs uppercase tracking-widest text-cyan-300">
+                  Round {i + 1}
+                </span>
+                <span
+                  className={`rounded px-2 py-0.5 font-mono text-xs font-bold ${
+                    count === 20
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : "bg-amber-500/20 text-amber-300"
+                  }`}
+                >
+                  {count} / 20 Assigned
+                </span>
+              </div>
+              <p className="text-xl font-bold tracking-tight text-white">{r.name}</p>
+              <p className="text-xs text-neutral-400">
+                5 questions in Alpha, 5 in Beta, 5 in Gamma, 5 in Delta.
+              </p>
+              <div className="rounded-lg bg-black/40 p-2.5 font-mono text-xs text-neutral-300">
+                <span>Reserve in bank: </span>
+                <span className="font-bold text-violet-300">{unassigned} items</span>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2 pt-2 border-t border-white/5">
+                <button
+                  type="button"
+                  className={smallBtn}
+                  onClick={() => {
+                    setFilterRound(r.id);
+                    setFilterSet("all");
+                    setSection("questions");
+                  }}
+                >
+                  View questions
+                </button>
+                <button
+                  type="button"
+                  className={smallBtn}
+                  onClick={() => setModal({ kind: "round", id: r.id })}
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  className={dangerBtn}
+                  onClick={() => deleteRound(r.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
+
+  /* ---------- Section 4: Questions Editor ---------- */
 
   const questionsView = (
     <div className="space-y-4">
+      {/* Filter and Search Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="sm:w-56">
+        <div className="sm:w-48">
           <label htmlFor="filter-set" className={labelClass}>
             Filter by set
           </label>
@@ -943,15 +1763,15 @@ export default function AdminPage() {
             value={activeSetFilter}
             onChange={(e) => setFilterSet(e.target.value)}
           >
-            <option value="all">All sets</option>
+            <option value="all">All 4 Sets ({questions.length})</option>
             {sets.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name}
+                {s.name} ({countFor(s.id)} questions)
               </option>
             ))}
           </select>
         </div>
-        <div className="sm:w-64">
+        <div className="sm:w-56">
           <label htmlFor="filter-round" className={labelClass}>
             Filter by round
           </label>
@@ -961,169 +1781,477 @@ export default function AdminPage() {
             value={activeRoundFilter}
             onChange={(e) => setFilterRound(e.target.value)}
           >
-            <option value="all">All rounds</option>
+            <option value="all">All 3 Rounds</option>
             {rounds.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name}
+                {r.name} ({questions.filter((q) => q.roundId === r.id).length})
               </option>
             ))}
           </select>
         </div>
-        <p className="font-mono text-xs text-neutral-500 sm:ml-auto">
-          Showing {visibleQuestions.length} of {questions.length}
+        <div className="sm:flex-1">
+          <label htmlFor="search-q" className={labelClass}>
+            Search text / answer / clue
+          </label>
+          <input
+            id="search-q"
+            className={inputClass}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search keywords..."
+          />
+        </div>
+        <p className="font-mono text-xs text-neutral-400 sm:ml-auto">
+          Showing {visibleQuestions.length} of {questions.length} assigned
         </p>
       </div>
 
+      {/* Questions Table */}
       <div className={`${cardClass} overflow-x-auto`}>
-        <table className="w-full min-w-[52rem] text-left text-sm">
+        <table className="w-full min-w-[56rem] text-left text-sm border-collapse">
           <thead>
             <tr className="border-b border-white/10 font-mono text-xs uppercase tracking-widest text-neutral-400">
-              <th className="px-4 py-3">Question</th>
+              <th className="px-4 py-3">#</th>
+              <th className="px-4 py-3">Question / Clue</th>
               <th className="px-4 py-3">Set</th>
               <th className="px-4 py-3">Round</th>
               <th className="px-4 py-3">Answer / Target</th>
               <th className="px-4 py-3">Marks</th>
-              <th className="px-4 py-3">Timer</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {visibleQuestions.length === 0 && (
+            {visibleQuestions.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-neutral-400">
-                  No questions match. Use Add Question to create one.
+                  No questions match your current filters.
                 </td>
               </tr>
-            )}
-            {visibleQuestions.map((q) => (
-              <tr key={q.id} className="border-b border-white/5 align-top">
-                <td className="max-w-xs px-4 py-3 text-neutral-100">
-                  <div className="flex items-start gap-3">
-                    {q.imageUrl && (
-                      <div className="relative shrink-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={q.imageUrl}
-                          alt="Question visual"
-                          className="h-10 w-10 rounded-lg border border-cyan-400/40 object-cover bg-neutral-900"
-                        />
+            ) : (
+              visibleQuestions.map((q, idx) => {
+                // Compute question index within its set and round
+                const siblings = questions.filter(
+                  (item) => item.setId === q.setId && item.roundId === q.roundId,
+                );
+                const orderInSlot = siblings.findIndex((item) => item.id === q.id) + 1;
+
+                return (
+                  <tr
+                    key={q.id}
+                    className={`border-b border-white/5 align-top hover:bg-white/[0.02] ${
+                      q.flaggedForReview ? "bg-amber-500/[0.04]" : ""
+                    }`}
+                  >
+                    <td className="px-4 py-3 font-mono text-xs text-neutral-400 font-bold">
+                      {orderInSlot} / {siblings.length}
+                    </td>
+                    <td className="max-w-xs px-4 py-3 text-neutral-100">
+                      <div className="flex items-start gap-3">
+                        {/* Visual or Taboo Card Preview */}
+                        {(q.imageUrl || q.cardReference) && (
+                          <div className="relative shrink-0">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={q.imageUrl || q.cardReference}
+                              alt="Visual"
+                              className="h-10 w-10 rounded-lg border border-cyan-400/40 object-cover bg-neutral-900"
+                            />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          {q.emojiClue ? (
+                            <p className="text-xl font-bold tracking-wider">{q.emojiClue}</p>
+                          ) : (
+                            <p className="font-medium text-white">{q.text || "(No text)"}</p>
+                          )}
+
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {q.flaggedForReview && (
+                              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[10px] text-amber-300 font-bold">
+                                ⚠️ Review Flagged
+                              </span>
+                            )}
+                            {q.cardReference && (
+                              <span className="rounded bg-violet-500/20 px-1.5 py-0.5 font-mono text-[10px] text-violet-300">
+                                Card Attached
+                              </span>
+                            )}
+                            {q.tabooWords && q.tabooWords.length > 0 && (
+                              <span className="rounded bg-red-500/20 px-1.5 py-0.5 font-mono text-[10px] text-red-300">
+                                {q.tabooWords.length} Taboo Words
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-white">{q.text || "(Image question without text)"}</p>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {q.imageUrl && (
-                          <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 font-mono text-[10px] text-cyan-300">
-                            Image Attached
-                          </span>
-                        )}
-                        {q.tabooWords && q.tabooWords.length > 0 && (
-                          <span className="rounded bg-red-500/20 px-1.5 py-0.5 font-mono text-[10px] text-red-300">
-                            {q.tabooWords.length} Taboo Clues
-                          </span>
-                        )}
-                        {q.options && q.options.length > 0 && (
-                          <span className="rounded bg-violet-500/20 px-1.5 py-0.5 font-mono text-[10px] text-violet-300">
-                            MCQ ({q.options.length} options)
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-neutral-300 font-mono text-xs">{setName(q.setId)}</td>
-                <td className="px-4 py-3 text-neutral-300 font-mono text-xs">{roundName(q.roundId)}</td>
-                <td className="px-4 py-3 text-neutral-300 font-semibold">
-                  {q.targetWord ? (
-                    <div>
-                      <span className="text-cyan-300 font-bold">{q.targetWord}</span>
-                      {q.tabooWords && (
-                        <p className="text-[11px] text-neutral-500 mt-0.5 truncate max-w-[14rem]">
-                          Taboo: {q.tabooWords.join(", ")}
-                        </p>
+                    </td>
+                    <td className="px-4 py-3 text-neutral-200 font-mono text-xs font-semibold">
+                      {setName(q.setId)}
+                    </td>
+                    <td className="px-4 py-3 text-neutral-300 font-mono text-xs">
+                      {roundName(q.roundId)}
+                    </td>
+                    <td className="px-4 py-3 text-neutral-200">
+                      {q.targetWord ? (
+                        <div>
+                          <span className="text-cyan-300 font-bold">{q.targetWord}</span>
+                          {q.tabooWords && (
+                            <p className="text-[11px] text-neutral-400 mt-0.5 truncate max-w-[14rem]">
+                              Taboo: {q.tabooWords.join(", ")}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="font-semibold text-cyan-300">{q.answer || "—"}</span>
                       )}
-                    </div>
-                  ) : (
-                    q.answer || "—"
-                  )}
-                </td>
-                <td className="px-4 py-3 text-cyan-300 font-mono font-bold">{q.marks}</td>
-                <td className="px-4 py-3 text-neutral-300 font-mono">{q.timer}s</td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
-                    <button type="button" className={smallBtn} onClick={() => setModal({ kind: "question", id: q.id })}>
-                      Edit
-                    </button>
-                    <button type="button" className={dangerBtn} onClick={() => deleteQuestion(q.id)}>
-                      Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                    </td>
+                    <td className="px-4 py-3 text-cyan-300 font-mono font-bold">{q.marks}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end items-center gap-1.5">
+                        <button
+                          type="button"
+                          className={smallBtn}
+                          title="Move question up"
+                          onClick={() => moveQuestionOrder(q.id, "up")}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className={smallBtn}
+                          title="Move question down"
+                          onClick={() => moveQuestionOrder(q.id, "down")}
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          className={smallBtn}
+                          onClick={() => setModal({ kind: "move", id: q.id })}
+                          title="Move question to another set, round, or unassigned bank"
+                        >
+                          Move...
+                        </button>
+                        <button
+                          type="button"
+                          className={smallBtn}
+                          onClick={() => setModal({ kind: "question", id: q.id })}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className={dangerBtn}
+                          onClick={() => moveQuestionToUnassigned(q.id)}
+                          title="Move to reserve bank"
+                        >
+                          To Bank
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
     </div>
   );
 
+  /* ---------- Section 5: Unassigned Question Bank ---------- */
+
+  const unassignedView = (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-white">
+            Unassigned Question Bank (Admin Reserve)
+          </h2>
+          <p className="text-sm text-neutral-400">
+            Source questions preserved in reserve (Items 21–25 of AI Q&A, 21–30 of Emoji Clues, 21–30 of Tech Taboo).
+            You can assign any item to a set or keep it here.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={primaryBtn}
+          onClick={() =>
+            setModal({
+              kind: "question",
+              isUnassigned: true,
+            })
+          }
+        >
+          + Add to Reserve Bank
+        </button>
+      </div>
+
+      <div className={`${cardClass} overflow-x-auto`}>
+        <table className="w-full min-w-[52rem] text-left text-sm border-collapse">
+          <thead>
+            <tr className="border-b border-white/10 font-mono text-xs uppercase tracking-widest text-neutral-400">
+              <th className="px-4 py-3">Round Category</th>
+              <th className="px-4 py-3">Question / Clue</th>
+              <th className="px-4 py-3">Answer / Target</th>
+              <th className="px-4 py-3">Forbidden Words</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {unassignedQuestions.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-neutral-400">
+                  No reserve questions currently in bank.
+                </td>
+              </tr>
+            ) : (
+              unassignedQuestions.map((q) => (
+                <tr
+                  key={q.id}
+                  className={`border-b border-white/5 align-top hover:bg-white/[0.02] ${
+                    q.flaggedForReview ? "bg-amber-500/[0.04]" : ""
+                  }`}
+                >
+                  <td className="px-4 py-3 font-mono text-xs text-cyan-300 font-bold">
+                    {roundName(q.roundId)}
+                  </td>
+                  <td className="max-w-xs px-4 py-3 text-neutral-100">
+                    <div className="flex items-start gap-2.5">
+                      {(q.imageUrl || q.cardReference) && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={q.imageUrl || q.cardReference}
+                          alt="Card"
+                          className="h-9 w-9 rounded-md border border-white/10 object-cover bg-neutral-900 shrink-0"
+                        />
+                      )}
+                      <div>
+                        {q.emojiClue ? (
+                          <p className="text-xl font-bold tracking-wider">{q.emojiClue}</p>
+                        ) : (
+                          <p className="font-medium text-white">{q.text}</p>
+                        )}
+                        {q.flaggedForReview && (
+                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
+                            ⚠️ OCR Review
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-white font-semibold">
+                    {q.targetWord || q.answer}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-neutral-400 font-mono">
+                    {q.tabooWords && q.tabooWords.length > 0 ? (
+                      <span className="text-red-300 font-medium">{q.tabooWords.join(", ")}</span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-1.5">
+                      <button
+                        type="button"
+                        className={successBtn}
+                        onClick={() => setModal({ kind: "move", id: q.id, isUnassigned: true })}
+                      >
+                        Assign to Set...
+                      </button>
+                      <button
+                        type="button"
+                        className={smallBtn}
+                        onClick={() =>
+                          setModal({ kind: "question", id: q.id, isUnassigned: true })
+                        }
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className={dangerBtn}
+                        onClick={() => deleteQuestion(q.id, true)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  /* ---------- Section 6: OCR / Review Flagged Items ---------- */
+
+  const reviewView = (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold tracking-tight text-white">
+          OCR & Screenshot Text Review Center
+        </h2>
+        <p className="text-sm text-neutral-400">
+          Rows with uncertain or cropped OCR text from screenshots are flagged here for administrative confirmation.
+        </p>
+      </div>
+
+      {flaggedItems.length === 0 ? (
+        <div className={`${cardClass} p-8 text-center text-emerald-300 font-mono text-sm`}>
+          ✓ All cards and questions are clear! No items currently flagged for OCR review.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {flaggedItems.map((q) => (
+            <div
+              key={q.id}
+              className="rounded-2xl border border-amber-500/40 bg-amber-500/[0.05] p-5 space-y-3"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-amber-500/20 px-2 py-0.5 font-mono text-xs font-bold text-amber-300">
+                    ⚠️ Review Required
+                  </span>
+                  <span className="font-mono text-xs text-neutral-300">
+                    {q.setId === "unassigned" ? "Unassigned Bank" : setName(q.setId)} · {roundName(q.roundId)}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className={smallBtn}
+                    onClick={() =>
+                      setModal({
+                        kind: "question",
+                        id: q.id,
+                        isUnassigned: q.setId === "unassigned",
+                      })
+                    }
+                  >
+                    Edit Card
+                  </button>
+                  <button
+                    type="button"
+                    className={successBtn}
+                    onClick={() => clearFlagReview(q.id)}
+                  >
+                    Mark as Approved
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="font-mono text-xs text-neutral-400 uppercase">Target Word</p>
+                  <p className="text-lg font-bold text-cyan-300">{q.targetWord || q.answer}</p>
+                  <p className="font-mono text-xs text-neutral-400 uppercase mt-2">Forbidden Words</p>
+                  <p className="text-sm text-red-300 font-mono">
+                    {q.tabooWords?.join(", ") || "(None)"}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-mono text-xs text-amber-300 uppercase font-bold">Review Note</p>
+                  <p className="text-sm text-neutral-200 mt-1">
+                    {q.reviewNotes || "OCR uncertain. Please verify with source screenshot."}
+                  </p>
+                  {q.cardReference && (
+                    <div className="mt-2">
+                      <p className="font-mono text-xs text-neutral-400">Card Reference:</p>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={q.cardReference}
+                        alt="Card source"
+                        className="mt-1 h-20 rounded border border-white/10 object-contain"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  /* ---------- Section 7: Settings & Storage ---------- */
+
   const settingsView = (
     <div className="max-w-2xl space-y-6">
-      {/* Backend Status Card */}
       <div className={`${cardClass} p-5 space-y-3 border-l-4 border-l-cyan-400`}>
         <p className="font-mono text-xs uppercase tracking-widest text-cyan-300 font-bold">
           Backend & Storage Status
         </p>
-        <p className="text-sm text-neutral-200">
-          The quiz questions, images, answer checking, and live leaderboard are active.
-        </p>
-        <div className="rounded-lg bg-black/40 p-3 font-mono text-xs text-neutral-300 space-y-1">
+        <div className="rounded-lg bg-black/40 p-3 font-mono text-xs text-neutral-300 space-y-1.5">
           <p>
-            Storage mode: <span className="text-emerald-400 font-bold">Local File System & In-Memory Store</span>
+            Storage mode:{" "}
+            <span className="text-emerald-400 font-bold">
+              Local File System (data/quiz-state.json) & Memory Store
+            </span>
           </p>
           <p>
-            Image Uploads: <span className="text-emerald-400 font-bold">Serving via Next.js Public Uploads</span>
+            Assigned Questions:{" "}
+            <span className="text-cyan-300 font-bold">{questions.length}</span> / 60
           </p>
           <p>
-            Admin Protection: <span className="text-cyan-300 font-bold">Active (Password Protected)</span>
+            Unassigned Question Bank:{" "}
+            <span className="text-violet-300 font-bold">{unassignedQuestions.length}</span> items
+          </p>
+          <p>
+            Card / Clue Assets:{" "}
+            <span className="text-emerald-400 font-bold">public/taboo/card-1.jpg..30.jpg</span>
           </p>
         </div>
       </div>
 
-      <div className={`${cardClass} p-5`}>
-        <label htmlFor="default-count" className={labelClass}>
-          Default questions created when adding a set or round
-        </label>
-        <input
-          id="default-count"
-          type="number"
-          min={0}
-          max={50}
-          className={`${inputClass} max-w-[8rem]`}
-          value={defaultCount}
-          onChange={(e) => {
-            const n = e.target.valueAsNumber;
-            setDefaultCount(Number.isFinite(n) ? Math.min(50, Math.max(0, Math.floor(n))) : 0);
+      <div className={`${cardClass} p-5 space-y-3`}>
+        <h3 className="font-bold text-white text-base">Export Quiz Backup</h3>
+        <p className="text-sm text-neutral-400">
+          Download the entire current quiz configuration, including all 60 assigned questions and 25 unassigned items.
+        </p>
+        <button
+          type="button"
+          className={ghostBtn}
+          onClick={() => {
+            const dataStr =
+              "data:text/json;charset=utf-8," +
+              encodeURIComponent(JSON.stringify({ sets, rounds, questions, unassignedQuestions }, null, 2));
+            const dl = document.createElement("a");
+            dl.setAttribute("href", dataStr);
+            dl.setAttribute("download", `tech-scramble-quiz-${new Date().toISOString().slice(0, 10)}.json`);
+            dl.click();
           }}
-        />
+        >
+          Export JSON Backup
+        </button>
       </div>
 
-      <div className={`${cardClass} p-5`}>
-        <p className="text-sm text-neutral-300">
-          Reset all questions back to the standard event bank (6 sets, 3 rounds, 5 rich questions each = 90 total questions).
+      <div className={`${cardClass} p-5 space-y-3 border border-red-500/20`}>
+        <h3 className="font-bold text-red-300 text-base">Reset Quiz to Standard Event Setup</h3>
+        <p className="text-sm text-neutral-400">
+          Resets sets (Alpha, Beta, Gamma, Delta), 3 rounds, exactly 5 questions per round (60 assigned) and 25 unassigned reserve questions.
         </p>
-        <button type="button" className={`${dangerBtn} mt-4`} onClick={resetAll}>
-          Reset to starting data
+        <button
+          type="button"
+          className={dangerBtn}
+          onClick={resetAllToStandard}
+        >
+          Reset to Standard Bank
         </button>
       </div>
     </div>
   );
 
+  /* ---------- Login Gate ---------- */
+
   const gate = (
-    <form onSubmit={unlock} className={`${cardClass} max-w-md space-y-4 p-6`}>
-      <h2 className="text-xl font-bold tracking-tight">Admin access</h2>
+    <form onSubmit={unlock} className={`${cardClass} max-w-md space-y-4 p-6 mx-auto`}>
+      <h2 className="text-xl font-bold tracking-tight">Admin Access</h2>
       <p className="text-sm text-neutral-400">
-        Enter the admin password to edit sets, rounds, and questions.
+        Enter the admin password to edit sets, rounds, and question banks.
       </p>
       <div>
         <label htmlFor="admin-password" className={labelClass}>
@@ -1154,6 +2282,8 @@ export default function AdminPage() {
     sets: "Question Sets",
     rounds: "Rounds",
     questions: "Question Editor",
+    unassigned: `Unassigned Bank (${unassignedQuestions.length})`,
+    review: `Review Center (${flaggedItems.length})`,
     settings: "Settings & Storage",
   };
 
@@ -1173,7 +2303,12 @@ export default function AdminPage() {
             {unlocked && (
               <span className="font-mono text-xs text-neutral-400">
                 {saveState.kind === "saving" && <span className="text-amber-300">Saving...</span>}
-                {saveState.kind === "saved" && <span className="text-cyan-300">Saved to database</span>}
+                {saveState.kind === "saved" && <span className="text-emerald-400 font-bold">✓ Saved</span>}
+                {saveState.kind === "validation-blocked" && (
+                  <span className="text-amber-300 font-semibold" title={saveState.message}>
+                    ⚠️ 5 Qs Guard Active
+                  </span>
+                )}
                 {saveState.kind === "error" && (
                   <span className="text-red-300">
                     Save failed.{" "}
@@ -1188,7 +2323,9 @@ export default function AdminPage() {
                 )}
               </span>
             )}
-            <span className="font-mono text-xs uppercase tracking-widest text-violet-300">Admin</span>
+            <span className="font-mono text-xs uppercase tracking-widest text-violet-300">
+              Admin Portal
+            </span>
           </div>
         </div>
       </header>
@@ -1203,16 +2340,30 @@ export default function AdminPage() {
               {actionBar}
             </div>
 
-            <nav className="flex flex-wrap gap-2 border-b border-white/10 pb-3" aria-label="Admin sections">
-              {(["overview", "sets", "rounds", "questions", "settings"] as Section[]).map((tab) => (
+            <nav
+              className="flex flex-wrap gap-2 border-b border-white/10 pb-3"
+              aria-label="Admin sections"
+            >
+              {(
+                [
+                  "overview",
+                  "sets",
+                  "rounds",
+                  "questions",
+                  "unassigned",
+                  "review",
+                  "settings",
+                ] as Section[]
+              ).map((tab) => (
                 <button
                   key={tab}
                   type="button"
                   onClick={() => setSection(tab)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${section === tab
-                    ? "bg-white/10 text-cyan-300 border border-cyan-300/30"
-                    : "text-neutral-400 hover:text-white"
-                    }`}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${
+                    section === tab
+                      ? "bg-white/10 text-cyan-300 border border-cyan-300/30"
+                      : "text-neutral-400 hover:text-white"
+                  }`}
                 >
                   {titles[tab]}
                 </button>
@@ -1223,6 +2374,8 @@ export default function AdminPage() {
             {section === "sets" && setsView}
             {section === "rounds" && roundsView}
             {section === "questions" && questionsView}
+            {section === "unassigned" && unassignedView}
+            {section === "review" && reviewView}
             {section === "settings" && settingsView}
           </div>
         )}

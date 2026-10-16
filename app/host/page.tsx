@@ -28,6 +28,10 @@ interface HostQuestion {
   options?: string[];
   targetWord?: string;
   tabooWords?: string[];
+  emojiClue?: string;
+  cardReference?: string;
+  flaggedForReview?: boolean;
+  reviewNotes?: string;
 }
 
 interface HostQuiz {
@@ -492,10 +496,24 @@ export default function HostPage() {
                       </div>
                     </div>
 
-                    {/* Question Text */}
-                    <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">
-                      {current.text || "(No question text)"}
-                    </h1>
+                    {/* Question Text / Emoji Clue */}
+                    {current.emojiClue ? (
+                      <div className="rounded-2xl border border-cyan-400/30 bg-cyan-500/[0.04] p-6 text-center space-y-3">
+                        <span className="rounded-md bg-cyan-400/20 px-2.5 py-1 font-mono text-xs font-bold uppercase tracking-wider text-cyan-300">
+                          Round 2 — Emoji Tech Guess
+                        </span>
+                        <p className="text-5xl sm:text-7xl font-extrabold tracking-widest py-4 select-none">
+                          {current.emojiClue}
+                        </p>
+                        <p className="font-mono text-sm text-neutral-400">
+                          Decode the technology term represented by this emoji sequence
+                        </p>
+                      </div>
+                    ) : (
+                      <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">
+                        {current.text || "(No question text)"}
+                      </h1>
+                    )}
 
                     {/* Tech Taboo Target & Banned Words Highlight */}
                     {isTabooRound && (
@@ -531,19 +549,19 @@ export default function HostPage() {
                       </div>
                     )}
 
-                    {/* Image visual if present */}
-                    {current.imageUrl && (
+                    {/* Image visual or Taboo Card if present */}
+                    {(current.cardReference || current.imageUrl) && (
                       <div className="relative group overflow-hidden rounded-2xl border border-cyan-500/30 bg-neutral-900/90 shadow-2xl">
                         <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.03] px-4 py-2.5">
                           <div className="flex items-center gap-2">
                             <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
                             <span className="font-mono text-xs font-bold uppercase tracking-wider text-cyan-300">
-                              Visual Clue / Image
+                              {current.cardReference ? "Tech Taboo Card Source" : "Visual Clue / Image"}
                             </span>
                           </div>
                           <button
                             type="button"
-                            onClick={() => setZoomImage(current.imageUrl)}
+                            onClick={() => setZoomImage(current.cardReference || current.imageUrl)}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-xs font-semibold text-neutral-200 transition hover:bg-white/10 hover:text-cyan-300"
                             title="Click to view full screen"
                           >
@@ -555,11 +573,11 @@ export default function HostPage() {
                         </div>
                         <div
                           className="cursor-zoom-in p-2 transition hover:opacity-95"
-                          onClick={() => setZoomImage(current.imageUrl)}
+                          onClick={() => setZoomImage(current.cardReference || current.imageUrl)}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={current.imageUrl}
+                            src={current.cardReference || current.imageUrl}
                             alt="Question visual"
                             className="mx-auto max-h-[28rem] w-full rounded-xl object-contain"
                           />
@@ -668,9 +686,9 @@ export default function HostPage() {
                             <th className="py-3 px-4">Rank</th>
                             <th className="py-3 px-4">Team</th>
                             <th className="py-3 px-4">Question Set</th>
-                            <th className="py-3 px-4 text-right">R1 (TikTok)</th>
-                            <th className="py-3 px-4 text-right">R2 (AI/Real)</th>
-                            <th className="py-3 px-4 text-right">R3 (Taboo)</th>
+                            <th className="py-3 px-4 text-right">R1 (AI Q&A)</th>
+                            <th className="py-3 px-4 text-right">R2 (Emoji Guess)</th>
+                            <th className="py-3 px-4 text-right">R3 (Tech Taboo)</th>
                             <th className="py-3 px-4 text-right">Total Score</th>
                           </tr>
                         </thead>

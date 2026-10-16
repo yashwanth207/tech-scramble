@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { loadQuiz } from "@/lib/quiz-store";
 
-// Public (no auth): returns sets, rounds, and questions for participants.
-// Answers and taboo words are stripped to prevent participant inspection in browser.
+// Public (no auth): returns sets, rounds, and safe questions for participants.
+// Correct answers and admin answer keys are stripped to prevent participant inspection in browser.
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -32,6 +32,10 @@ export async function GET(request: Request) {
         timer: q.timer,
         imageUrl: q.imageUrl,
         options: q.options,
+        emojiClue: q.emojiClue,
+        targetWord: q.targetWord,
+        tabooWords: q.tabooWords,
+        cardReference: q.cardReference,
       })),
     },
     { headers: { "Cache-Control": "no-store" } },

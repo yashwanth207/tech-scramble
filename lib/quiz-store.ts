@@ -192,10 +192,45 @@ export function sanitizeQuiz(input: unknown): StoredQuiz | null {
       options: options && options.length > 0 ? options : undefined,
       targetWord: cleanString(raw.targetWord, 200) || undefined,
       tabooWords: tabooWords && tabooWords.length > 0 ? tabooWords : undefined,
+      emojiClue: cleanString(raw.emojiClue, 200) || undefined,
+      cardReference: cleanString(raw.cardReference, 500) || undefined,
+      flaggedForReview: Boolean(raw.flaggedForReview) || undefined,
+      reviewNotes: cleanString(raw.reviewNotes, 500) || undefined,
     });
   }
 
-  return { sets, rounds, questions };
+  const unassignedQuestions: StoredQuestion[] = [];
+  if (Array.isArray(input.unassignedQuestions)) {
+    for (const raw of input.unassignedQuestions.slice(0, MAX_QUESTIONS)) {
+      if (!isObject(raw) || typeof raw.id !== "string" || !ID_PATTERN.test(raw.id)) continue;
+      const options = Array.isArray(raw.options)
+        ? raw.options.map((o) => cleanString(o, 100)).filter(Boolean)
+        : undefined;
+      const tabooWords = Array.isArray(raw.tabooWords)
+        ? raw.tabooWords.map((t) => cleanString(t, 50)).filter(Boolean)
+        : undefined;
+
+      unassignedQuestions.push({
+        id: raw.id,
+        setId: "unassigned",
+        roundId: cleanString(raw.roundId, 64) || "r1",
+        text: cleanString(raw.text, 2000),
+        answer: cleanString(raw.answer, 500),
+        marks: cleanNumber(raw.marks, 0, 1000, 10),
+        timer: cleanNumber(raw.timer, 5, 3600, 30),
+        imageUrl: cleanString(raw.imageUrl, 2000),
+        options: options && options.length > 0 ? options : undefined,
+        targetWord: cleanString(raw.targetWord, 200) || undefined,
+        tabooWords: tabooWords && tabooWords.length > 0 ? tabooWords : undefined,
+        emojiClue: cleanString(raw.emojiClue, 200) || undefined,
+        cardReference: cleanString(raw.cardReference, 500) || undefined,
+        flaggedForReview: Boolean(raw.flaggedForReview) || undefined,
+        reviewNotes: cleanString(raw.reviewNotes, 500) || undefined,
+      });
+    }
+  }
+
+  return { sets, rounds, questions, unassignedQuestions };
 }
 
 /* ---------- Supabase REST Integration (When Supabase is provided) ---------- */
