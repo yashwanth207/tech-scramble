@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img">
+  <rect width="100%" height="100%" fill="#121820"/>
+  <g transform="translate(202 36)">
+      <rect width="250" height="288" rx="28" fill="#163246"/>
+      <svg x="61" y="48" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="#E7F2FA" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10a10 10 0 0 1 14 0"/><path d="M8 13a6 6 0 0 1 8 0"/><path d="M12 17h.01"/></svg>
+      <text x="125" y="230" text-anchor="middle" fill="#E7F2FA" font-family="Segoe UI, sans-serif" font-size="20" font-weight="700">NO CABLE NEEDED</text>
+    </g>
+<g transform="translate(508 36)">
+      <rect width="250" height="288" rx="28" fill="#2A2142"/>
+      <svg x="61" y="48" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="#E7F2FA" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.5 2.5 2.5 13 0 16M12 4c-2.5 2.5-2.5 13 0 16"/></svg>
+      <text x="125" y="230" text-anchor="middle" fill="#E7F2FA" font-family="Segoe UI, sans-serif" font-size="20" font-weight="700">THROUGH THE AIR</text>
+    </g>
+</svg>

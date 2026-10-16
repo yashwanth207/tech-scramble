@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img">
+  <rect width="100%" height="100%" fill="#121820"/>
+  <g transform="translate(202 36)">
+      <rect width="250" height="288" rx="28" fill="#163246"/>
+      <svg x="61" y="48" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="#E7F2FA" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"/><ellipse cx="12" cy="12" rx="9" ry="4"/><ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(120 12 12)"/></svg>
+      <text x="125" y="230" text-anchor="middle" fill="#E7F2FA" font-family="Segoe UI, sans-serif" font-size="20" font-weight="700">QUBITS, NOT ONLY BITS</text>
+    </g>
+<g transform="translate(508 36)">
+      <rect width="250" height="288" rx="28" fill="#2A2142"/>
+      <svg x="61" y="48" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="#E7F2FA" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7v10M10 7c2 0 3 1 3 2s-1 2-3 2  -3 1-3 2 1 2 3 2M18 7v10"/></svg>
+      <text x="125" y="230" text-anchor="middle" fill="#E7F2FA" font-family="Segoe UI, sans-serif" font-size="20" font-weight="700">SUPERPOSITION DOES WORK</text>
+    </g>
+</svg>

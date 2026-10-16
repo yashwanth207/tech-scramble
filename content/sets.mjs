@@ -1,0 +1,42 @@
+export const sets = [
+  {
+    set_id: "foundations",
+    name: "Tech Foundations",
+    description: "Internet, computers, basic programming, and everyday technology.",
+    difficulty_min: "easy",
+    difficulty_max: "medium",
+    themes: ["devices", "networks", "communication", "software"],
+  },
+  {
+    set_id: "code",
+    name: "Code Breakers",
+    description: "Programming languages, algorithms, data structures, and debugging.",
+    difficulty_min: "easy",
+    difficulty_max: "hard",
+    themes: ["programming", "data", "tools"],
+  },
+  {
+    set_id: "ai",
+    name: "AI & Future Tech",
+    description: "Machine learning, generative models, robotics, and emerging technology.",
+    difficulty_min: "medium",
+    difficulty_max: "expert",
+    themes: ["ai", "robotics"],
+  },
+  {
+    set_id: "cyber",
+    name: "Cyber & Cloud",
+    description: "Security, networking, APIs, cloud, and delivery engineering.",
+    difficulty_min: "medium",
+    difficulty_max: "expert",
+    themes: ["security", "networks", "devops", "architecture"],
+  },
+  {
+    set_id: "mix",
+    name: "Ultimate Tech Mix",
+    description: "A balanced mix of concepts, visual puzzles, and harder terminology.",
+    difficulty_min: "easy",
+    difficulty_max: "expert",
+    themes: ["symbols", "software", "systems", "cryptography"],
+  },
+];

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img">
+  <rect width="100%" height="100%" fill="#121820"/>
+  <g transform="translate(202 36)">
+      <rect width="250" height="288" rx="28" fill="#163246"/>
+      <svg x="61" y="48" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="#E7F2FA" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h6a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 3z"/><path d="M19 4h-6a3 3 0 0 0-3 3v13h6a3 3 0 0 1 3 3z"/></svg>
+      <text x="125" y="230" text-anchor="middle" fill="#E7F2FA" font-family="Segoe UI, sans-serif" font-size="20" font-weight="700">HUGE TEXT ENGINE</text>
+    </g>
+<g transform="translate(508 36)">
+      <rect width="250" height="288" rx="28" fill="#2A2142"/>
+      <svg x="61" y="48" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="#E7F2FA" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14v10H8l-3 3z"/></svg>
+      <text x="125" y="230" text-anchor="middle" fill="#E7F2FA" font-family="Segoe UI, sans-serif" font-size="20" font-weight="700">PREDICTS A NEXT WORD</text>
+    </g>
+</svg>
