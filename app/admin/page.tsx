@@ -538,7 +538,7 @@ export default function AdminPage() {
   const [filterRound, setFilterRound] = useState<string>("all");
 
   const [modal, setModal] = useState<ModalState>(null);
-  const [uploadKey, setUploadKey] = useState<string>("Bommali");
+  const [uploadKey, setUploadKey] = useState<string>("");
   const [unlocked, setUnlocked] = useState<boolean>(false);
   const [unlocking, setUnlocking] = useState<boolean>(false);
   const [unlockError, setUnlockError] = useState<string>("");
@@ -1080,7 +1080,7 @@ export default function AdminPage() {
     <form onSubmit={unlock} className={`${cardClass} max-w-md space-y-4 p-6`}>
       <h2 className="text-xl font-bold tracking-tight">Admin access</h2>
       <p className="text-sm text-neutral-400">
-        Enter the admin password to edit sets, rounds, and questions. Default password: <code className="text-cyan-300">Bommali</code>
+        Enter the admin password to edit sets, rounds, and questions.
       </p>
       <div>
         <label htmlFor="admin-password" className={labelClass}>
