@@ -47,7 +47,7 @@ const IMAGE_ROUND_NAME = "ai or real image";
 const IMAGE_CHOICES = ["Real photo", "AI-generated"];
 
 const ROUND_BLURBS: Record<string, string> = {
-  "guess the tiktok word": "Type the slang or internet trend phrase that fits the clue.",
+  "guess the tiktok word": "Inspect the visual clue or prompt, then type the matching slang or trend phrase.",
   "ai or real image": "Inspect the visual and choose: is it real or AI-generated?",
   "tech taboo": "Guess the tech term from your teammate's clues without saying any taboo words!",
 };
@@ -98,6 +98,15 @@ export default function ParticipantPage() {
   const [input, setInput] = useState<string>("");
   const [locked, setLocked] = useState<boolean>(false);
   const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setZoomImage(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Leaderboard modal state
   const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
@@ -568,13 +577,34 @@ export default function ParticipantPage() {
         <h2 className="text-2xl font-bold leading-snug tracking-tight sm:text-3xl">{currentQuestion.text}</h2>
 
         {currentQuestion.imageUrl && (
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-neutral-900">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={currentQuestion.imageUrl}
-              alt="Question visual"
-              className="mx-auto max-h-80 w-full object-contain"
-            />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono font-medium uppercase tracking-wider text-cyan-300">
+                <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+                Visual Clue Attached
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomImage(currentQuestion.imageUrl)}
+                className="inline-flex items-center gap-1 text-xs font-medium text-neutral-400 transition hover:text-cyan-300"
+              >
+                <span>Tap to expand</span>
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0 0l-5-5m-7 11l-5 5m0 0h4m-4 0v-4m16 4v-4m0 4h-4m4 0l-5-5" />
+                </svg>
+              </button>
+            </div>
+            <div
+              className="cursor-zoom-in overflow-hidden rounded-xl border border-white/10 bg-neutral-900 transition hover:border-cyan-400/40"
+              onClick={() => setZoomImage(currentQuestion.imageUrl)}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={currentQuestion.imageUrl}
+                alt="Question visual"
+                className="mx-auto max-h-80 w-full object-contain"
+              />
+            </div>
           </div>
         )}
 
@@ -854,6 +884,38 @@ export default function ParticipantPage() {
                 {loadingLb ? "Refreshing..." : "Refresh Scores"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox zoom modal for participant */}
+      {zoomImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-md"
+          onClick={() => setZoomImage(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="relative max-h-[92vh] max-w-[94vw] overflow-hidden rounded-2xl border border-white/20 bg-neutral-950 p-3 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center justify-between border-b border-white/10 pb-2 font-mono text-xs text-neutral-400">
+              <span className="text-cyan-300 font-semibold uppercase tracking-wider">Visual Clue</span>
+              <button
+                type="button"
+                onClick={() => setZoomImage(null)}
+                className="rounded-lg border border-white/20 bg-white/10 px-3 py-1 font-sans text-xs font-semibold text-white transition hover:bg-white/20"
+              >
+                Close (Esc)
+              </button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={zoomImage}
+              alt="Enlarged visual"
+              className="mx-auto max-h-[80vh] w-auto max-w-full rounded-xl object-contain"
+            />
           </div>
         </div>
       )}

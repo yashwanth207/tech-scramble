@@ -90,7 +90,7 @@ export const INITIAL_ROUNDS: StoredRound[] = [
   { id: "r3", name: "Tech Taboo" },
 ];
 
-const TIKTOK_BANK: { text: string; answer: string }[] = [
+const TIKTOK_BANK: { text: string; answer: string; imageUrl?: string }[] = [
   { text: "Short for charisma; the magnetic ability to charm or persuade anyone without effort.", answer: "Rizz" },
   { text: "Used when someone executed a task with absolute flawless perfection (e.g. 'She ___ and left no crumbs').", answer: "Ate" },
   { text: "The advice given to someone who spends way too much time online arguing on Discord or Reddit.", answer: "Touch grass" },
@@ -326,7 +326,7 @@ export function buildDefaultQuiz(): StoredQuiz {
         answer: item.answer,
         marks: 10,
         timer: 30,
-        imageUrl: "",
+        imageUrl: item.imageUrl ?? "",
       });
     }
 

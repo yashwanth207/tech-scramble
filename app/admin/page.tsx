@@ -466,9 +466,19 @@ function QuestionForm({
           </div>
         </div>
 
-        {/* Image Attachment (For AI or Real Image, or any visual question) */}
+        {/* Image Attachment (For Round 1 TikTok memes, Round 2 AI/Real, or any visual question) */}
         <div className="space-y-3 rounded-xl border border-white/10 p-4">
-          <p className={labelClass}>Question Image visual</p>
+          <div className="flex items-center justify-between">
+            <p className={labelClass}>Question Image Visual (Round 1 & 2 Visuals)</p>
+            {shownImage && (
+              <span className="rounded bg-cyan-500/20 px-2 py-0.5 font-mono text-[10px] text-cyan-300">
+                Image Active
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-neutral-400">
+            Attach an image clue for Round 1 (TikTok trends & memes), Round 2 (AI vs Real), or any visual question.
+          </p>
           {shownImage && (
             <div className="space-y-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -485,18 +495,37 @@ function QuestionForm({
               </button>
             </div>
           )}
-          <div>
-            <label htmlFor="q-image" className={labelClass}>
-              {shownImage ? "Replace image" : "Upload image"} (JPG, PNG, WebP max 4 MB)
-            </label>
-            <input
-              id="q-image"
-              type="file"
-              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-              disabled={saving}
-              onChange={handleFile}
-              className="block w-full text-sm text-neutral-300 file:mr-3 file:rounded-md file:border-0 file:bg-violet-500/30 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-violet-500/50"
-            />
+          <div className="space-y-2">
+            <div>
+              <label htmlFor="q-image" className={labelClass}>
+                {shownImage ? "Replace image file" : "Upload image file"} (JPG, PNG, WebP max 4 MB)
+              </label>
+              <input
+                id="q-image"
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                disabled={saving}
+                onChange={handleFile}
+                className="block w-full text-sm text-neutral-300 file:mr-3 file:rounded-md file:border-0 file:bg-violet-500/30 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-violet-500/50"
+              />
+            </div>
+            <div>
+              <label htmlFor="q-image-url" className={labelClass}>
+                Or direct Image URL / Path
+              </label>
+              <input
+                id="q-image-url"
+                type="text"
+                className={inputClass}
+                value={draft.imageUrl}
+                onChange={(e) => {
+                  setPendingFile(null);
+                  setPreviewUrl("");
+                  setDraft({ ...draft, imageUrl: e.target.value });
+                }}
+                placeholder="e.g. /uploads/image.png or https://..."
+              />
+            </div>
           </div>
           {uploadError && <p className="text-xs text-red-300">{uploadError}</p>}
         </div>
@@ -969,23 +998,37 @@ export default function AdminPage() {
             {visibleQuestions.map((q) => (
               <tr key={q.id} className="border-b border-white/5 align-top">
                 <td className="max-w-xs px-4 py-3 text-neutral-100">
-                  <p className="font-medium text-white">{q.text}</p>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
+                  <div className="flex items-start gap-3">
                     {q.imageUrl && (
-                      <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 font-mono text-[10px] text-cyan-300">
-                        Image Attached
-                      </span>
+                      <div className="relative shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={q.imageUrl}
+                          alt="Question visual"
+                          className="h-10 w-10 rounded-lg border border-cyan-400/40 object-cover bg-neutral-900"
+                        />
+                      </div>
                     )}
-                    {q.tabooWords && q.tabooWords.length > 0 && (
-                      <span className="rounded bg-red-500/20 px-1.5 py-0.5 font-mono text-[10px] text-red-300">
-                        {q.tabooWords.length} Taboo Clues
-                      </span>
-                    )}
-                    {q.options && q.options.length > 0 && (
-                      <span className="rounded bg-violet-500/20 px-1.5 py-0.5 font-mono text-[10px] text-violet-300">
-                        MCQ ({q.options.length} options)
-                      </span>
-                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-white">{q.text || "(Image question without text)"}</p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {q.imageUrl && (
+                          <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 font-mono text-[10px] text-cyan-300">
+                            Image Attached
+                          </span>
+                        )}
+                        {q.tabooWords && q.tabooWords.length > 0 && (
+                          <span className="rounded bg-red-500/20 px-1.5 py-0.5 font-mono text-[10px] text-red-300">
+                            {q.tabooWords.length} Taboo Clues
+                          </span>
+                        )}
+                        {q.options && q.options.length > 0 && (
+                          <span className="rounded bg-violet-500/20 px-1.5 py-0.5 font-mono text-[10px] text-violet-300">
+                            MCQ ({q.options.length} options)
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </td>
                 <td className="px-4 py-3 text-neutral-300 font-mono text-xs">{setName(q.setId)}</td>

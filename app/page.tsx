@@ -17,7 +17,7 @@ const rounds: Round[] = [
     title: "Guess the TikTok Word",
     tag: "Round One",
     description:
-      "Slang, trends and viral phrases. Decode the word before the clock does.",
+      "Slang, memes, trends and viral visuals. Decode the word before the clock runs out.",
     hint: "Fast. Loud. Very online.",
   },
   {
