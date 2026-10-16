@@ -496,24 +496,21 @@ export default function HostPage() {
                       </div>
                     </div>
 
-                    {/* Question Text / Emoji Clue */}
-                    {current.emojiClue ? (
-                      <div className="rounded-2xl border border-cyan-400/30 bg-cyan-500/[0.04] p-6 text-center space-y-3">
-                        <span className="rounded-md bg-cyan-400/20 px-2.5 py-1 font-mono text-xs font-bold uppercase tracking-wider text-cyan-300">
-                          Round 2 — Emoji Tech Guess
+                    {/* Question Header & Title */}
+                    <div className="space-y-3">
+                      {isTabooRound ? null : roundName.toLowerCase().includes("air or real") || current.roundId === "r2" ? (
+                        <span className="inline-block rounded bg-violet-500/20 px-2.5 py-0.5 font-mono text-xs font-semibold text-violet-300">
+                          Round 2 — Air or Real
                         </span>
-                        <p className="text-5xl sm:text-7xl font-extrabold tracking-widest py-4 select-none">
-                          {current.emojiClue}
-                        </p>
-                        <p className="font-mono text-sm text-neutral-400">
-                          Decode the technology term represented by this emoji sequence
-                        </p>
-                      </div>
-                    ) : (
+                      ) : (
+                        <span className="inline-block rounded bg-cyan-500/20 px-2.5 py-0.5 font-mono text-xs font-semibold text-cyan-300">
+                          Round 1 — Guess the Tech Word
+                        </span>
+                      )}
                       <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">
                         {current.text || "(No question text)"}
                       </h1>
-                    )}
+                    </div>
 
                     {/* Tech Taboo Target & Banned Words Highlight */}
                     {isTabooRound && (
@@ -686,8 +683,8 @@ export default function HostPage() {
                             <th className="py-3 px-4">Rank</th>
                             <th className="py-3 px-4">Team</th>
                             <th className="py-3 px-4">Question Set</th>
-                            <th className="py-3 px-4 text-right">R1 (AI Q&A)</th>
-                            <th className="py-3 px-4 text-right">R2 (Emoji Guess)</th>
+                            <th className="py-3 px-4 text-right">R1 (Tech Word)</th>
+                            <th className="py-3 px-4 text-right">R2 (Air or Real)</th>
                             <th className="py-3 px-4 text-right">R3 (Tech Taboo)</th>
                             <th className="py-3 px-4 text-right">Total Score</th>
                           </tr>

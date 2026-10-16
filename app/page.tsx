@@ -14,19 +14,19 @@ const navItems: NavItem[] = [
 const rounds: Round[] = [
   {
     id: "01",
-    title: "Round 1 — AI Quick Q&A",
+    title: "Round 1 — Guess the Tech Word",
     tag: "Round One",
     description:
-      "Rapid-fire artificial intelligence fundamentals. Answer one-word questions before time runs out.",
-    hint: "Sharp. Direct. High speed.",
+      "Inspect the visual clue and identify the technology or technical word represented.",
+    hint: "Visual clues. Direct typing.",
   },
   {
     id: "02",
-    title: "Round 2 — Emoji Tech Guess",
+    title: "Round 2 — Air or Real",
     tag: "Round Two",
     description:
-      "Decode technology terms, frameworks, and computing concepts hidden inside emoji sequences.",
-    hint: "Visual clues. Tech culture.",
+      "Inspect the image and decide whether it is AI-generated or real.",
+    hint: "AI vs Reality. Two choices.",
   },
   {
     id: "03",

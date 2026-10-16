@@ -48,8 +48,8 @@ interface LeaderboardEntry {
 }
 
 const ROUND_BLURBS: Record<string, string> = {
-  "ai quick q&a": "Fast-paced AI definitions and core concepts. Submit one-word answers before time runs out.",
-  "emoji tech guess": "Inspect the emoji sequence and decode the matching technology term.",
+  "guess the tech word": "Inspect the visual clue and identify the technology or technical word.",
+  "air or real": "Inspect the image and decide whether it is AI-Generated or Real.",
   "tech taboo": "Describe the tech term without uttering any of the prohibited words!",
 };
 
@@ -179,10 +179,12 @@ export default function ParticipantPage() {
   );
 
   const roundNameOf = (roundId: string) => rounds.find((r) => r.id === roundId)?.name ?? "";
-  const isEmojiRound = (q: PublicQuestion) =>
-    roundNameOf(q.roundId).trim().toLowerCase().includes("emoji") || Boolean(q.emojiClue);
+  const isTechWordRound = (q: PublicQuestion) =>
+    roundNameOf(q.roundId).trim().toLowerCase().includes("tech word") || q.roundId === "r1";
+  const isAirOrRealRound = (q: PublicQuestion) =>
+    roundNameOf(q.roundId).trim().toLowerCase().includes("air or real") || q.roundId === "r2";
   const isTabooRound = (q: PublicQuestion) =>
-    roundNameOf(q.roundId).trim().toLowerCase().includes("taboo") || Boolean(q.tabooWords && q.tabooWords.length > 0);
+    roundNameOf(q.roundId).trim().toLowerCase().includes("taboo") || q.roundId === "r3" || Boolean(q.tabooWords && q.tabooWords.length > 0);
   const blurbFor = (name: string) => ROUND_BLURBS[name.trim().toLowerCase()] ?? "Answer the questions in this round.";
   const countInSet = (setId: string) => quiz?.questions.filter((q) => q.setId === setId).length ?? 0;
 
@@ -578,19 +580,79 @@ export default function ParticipantPage() {
       </div>
 
       <div className={`${cardClass} space-y-6 p-5 sm:p-8`}>
-        {/* Round 2 — Emoji Tech Guess */}
-        {isEmojiRound(currentQuestion) ? (
+        {/* Round 2 — Air or Real */}
+        {isAirOrRealRound(currentQuestion) ? (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-cyan-400/30 bg-cyan-500/[0.04] p-6 text-center shadow-lg">
-              <span className="rounded-md bg-cyan-400/20 px-2.5 py-1 font-mono text-xs font-bold uppercase tracking-wider text-cyan-300">
-                Round 2 — Emoji Tech Guess
+            <div className="flex items-center justify-between border-b border-violet-500/20 pb-2.5">
+              <span className="rounded-md bg-violet-500/20 px-2.5 py-1 font-mono text-xs font-bold uppercase tracking-wider text-violet-300">
+                Round 2 — Air or Real
               </span>
-              <p className="mt-4 text-4xl sm:text-6xl font-extrabold tracking-widest py-3 select-none">
-                {currentQuestion.emojiClue || currentQuestion.text}
+              <span className="font-mono text-xs text-neutral-400">
+                Decide: Is this image AI-Generated or Real?
+              </span>
+            </div>
+
+            {/* Image visual */}
+            {currentQuestion.imageUrl && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-mono font-medium uppercase tracking-wider text-cyan-300">
+                    <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+                    Image Clue
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setZoomImage(currentQuestion.imageUrl)}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-neutral-400 transition hover:text-cyan-300"
+                  >
+                    <span>Tap to expand</span>
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0 0l-5-5m-7 11l-5 5m0 0h4m-4 0v-4m16 4v-4m0 4h-4m4 0l-5-5" />
+                    </svg>
+                  </button>
+                </div>
+                <div
+                  className="cursor-zoom-in overflow-hidden rounded-xl border border-white/10 bg-neutral-900 transition hover:border-violet-400/40"
+                  onClick={() => setZoomImage(currentQuestion.imageUrl)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={currentQuestion.imageUrl}
+                    alt="Air or Real image visual"
+                    className="mx-auto max-h-80 w-full object-contain"
+                  />
+                </div>
+              </div>
+            )}
+
+            {currentQuestion.text && (
+              <p className="text-lg font-medium text-neutral-200 leading-relaxed">
+                {currentQuestion.text}
               </p>
-              <p className="mt-2 text-xs text-neutral-400 font-mono">
-                Decode the technology term represented by this emoji sequence
-              </p>
+            )}
+
+            {/* Two choice options: AI-Generated vs Real */}
+            <div className="grid gap-3 sm:grid-cols-2 pt-2" role="group" aria-label="Classification options">
+              {["AI-Generated", "Real"].map((opt) => {
+                const active = input === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    disabled={locked || checking}
+                    aria-pressed={active}
+                    onClick={() => setInput(opt)}
+                    className={`rounded-xl border p-4 text-center text-base font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed ${
+                      active
+                        ? "border-cyan-300 bg-cyan-300/15 text-cyan-200 ring-1 ring-cyan-300"
+                        : "border-white/10 bg-neutral-900 text-neutral-300 hover:border-violet-400/60 hover:text-white"
+                    } ${locked && !active ? "opacity-40" : ""}`}
+                  >
+                    <span className="text-lg mr-2">{opt === "AI-Generated" ? "🤖" : "📷"}</span>
+                    {opt}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ) : isTabooRound(currentQuestion) ? (
@@ -648,101 +710,100 @@ export default function ParticipantPage() {
                 />
               </div>
             )}
+            <div>
+              <label htmlFor="answer" className="sr-only">
+                Target Word Guess
+              </label>
+              <input
+                id="answer"
+                className={inputClass}
+                placeholder="Type the target word to submit..."
+                autoComplete="off"
+                disabled={locked || checking}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !locked && !checking && input.trim()) {
+                    e.preventDefault();
+                    lockAnswer(false);
+                  }
+                }}
+              />
+            </div>
           </div>
         ) : (
-          /* Round 1 — AI Quick Q&A */
-          <div className="space-y-3">
-            <span className="inline-block rounded bg-violet-500/20 px-2.5 py-0.5 font-mono text-xs font-semibold text-violet-300">
-              Round 1 — AI Quick Q&A
-            </span>
-            <h2 className="text-2xl font-bold leading-snug tracking-tight sm:text-3xl">{currentQuestion.text}</h2>
-          </div>
-        )}
-
-        {/* Visual attachment if present (for non-taboo or custom questions) */}
-        {currentQuestion.imageUrl && !isTabooRound(currentQuestion) && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="inline-flex items-center gap-1.5 text-xs font-mono font-medium uppercase tracking-wider text-cyan-300">
-                <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
-                Visual Attached
+          /* Round 1 — Guess the Tech Word */
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2.5">
+              <span className="inline-block rounded bg-cyan-500/20 px-2.5 py-0.5 font-mono text-xs font-semibold text-cyan-300">
+                Round 1 — Guess the Tech Word
               </span>
-              <button
-                type="button"
-                onClick={() => setZoomImage(currentQuestion.imageUrl)}
-                className="inline-flex items-center gap-1 text-xs font-medium text-neutral-400 transition hover:text-cyan-300"
-              >
-                <span>Tap to expand</span>
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0 0l-5-5m-7 11l-5 5m0 0h4m-4 0v-4m16 4v-4m0 4h-4m4 0l-5-5" />
-                </svg>
-              </button>
+              <span className="font-mono text-xs text-neutral-400">
+                Identify the technology represented
+              </span>
             </div>
-            <div
-              className="cursor-zoom-in overflow-hidden rounded-xl border border-white/10 bg-neutral-900 transition hover:border-cyan-400/40"
-              onClick={() => setZoomImage(currentQuestion.imageUrl)}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={currentQuestion.imageUrl}
-                alt="Question visual"
-                className="mx-auto max-h-80 w-full object-contain"
+
+            {/* Image visual if present */}
+            {currentQuestion.imageUrl && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-mono font-medium uppercase tracking-wider text-cyan-300">
+                    <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+                    Visual Clue
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setZoomImage(currentQuestion.imageUrl)}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-neutral-400 transition hover:text-cyan-300"
+                  >
+                    <span>Tap to expand</span>
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0 0l-5-5m-7 11l-5 5m0 0h4m-4 0v-4m16 4v-4m0 4h-4m4 0l-5-5" />
+                    </svg>
+                  </button>
+                </div>
+                <div
+                  className="cursor-zoom-in overflow-hidden rounded-xl border border-white/10 bg-neutral-900 transition hover:border-cyan-400/40"
+                  onClick={() => setZoomImage(currentQuestion.imageUrl)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={currentQuestion.imageUrl}
+                    alt="Tech word visual clue"
+                    className="mx-auto max-h-80 w-full object-contain"
+                  />
+                </div>
+              </div>
+            )}
+
+            <h2 className="text-2xl font-bold leading-snug tracking-tight sm:text-3xl text-white">
+              {currentQuestion.text}
+            </h2>
+
+            <div>
+              <label htmlFor="answer" className="sr-only">
+                Your guess
+              </label>
+              <input
+                id="answer"
+                className={inputClass}
+                placeholder="Type the technology or technical word (e.g. Artificial Intelligence, GPU)..."
+                autoComplete="off"
+                disabled={locked || checking}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !locked && !checking && input.trim()) {
+                    e.preventDefault();
+                    lockAnswer(false);
+                  }
+                }}
               />
             </div>
           </div>
         )}
 
-        {/* Answer input */}
-        {currentQuestion.options && currentQuestion.options.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Multiple choice options">
-            {currentQuestion.options.map((option) => {
-              const active = input === option;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  disabled={locked || checking}
-                  aria-pressed={active}
-                  onClick={() => setInput(option)}
-                  className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed ${active
-                    ? "border-cyan-300 bg-cyan-300/10 text-cyan-200"
-                    : "border-white/10 bg-neutral-900 hover:border-violet-400/60"
-                    } ${locked && !active ? "opacity-50" : ""}`}
-                >
-                  {option}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div>
-            <label htmlFor="answer" className="sr-only">
-              Your answer
-            </label>
-            <input
-              id="answer"
-              className={inputClass}
-              placeholder={
-                isEmojiRound(currentQuestion)
-                  ? "Type the technology term (e.g. Cloud Computing)..."
-                  : isTabooRound(currentQuestion)
-                    ? "Type the target word to submit..."
-                    : "Type your one-word AI answer..."
-              }
-              autoComplete="off"
-              disabled={locked || checking}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !locked && !checking && input.trim()) {
-                  e.preventDefault();
-                  lockAnswer(false);
-                }
-              }}
-            />
-          </div>
-        )}
-
+        {/* Feedback & Actions */}
         {locked ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-white/10 pt-4">
             <div>
@@ -751,9 +812,11 @@ export default function ParticipantPage() {
                   ? `✓ Correct! +${saved[currentQuestion.id]?.points} marks awarded`
                   : saved[currentQuestion.id]?.timedOut
                     ? "⏱ Time expired. Submission recorded."
-                    : "✗ Answer recorded."}
+                    : "✗ Incorrect. Submission recorded."}
               </p>
-              <p className="text-xs text-neutral-400">Score permanently saved to database.</p>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                Score permanently saved to database.
+              </p>
             </div>
             <button type="button" className={primaryBtn} onClick={nextQuestion}>
               {qIndex + 1 >= roundQuestions.length

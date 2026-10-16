@@ -198,8 +198,18 @@ function QuestionForm({
   const selectedRound = rounds.find((r) => r.id === draft.roundId);
   const roundLower = selectedRound?.name.trim().toLowerCase() ?? "";
 
-  const isR1 = roundLower.includes("quick") || roundLower.includes("q&a") || draft.roundId === "r1";
-  const isR2 = roundLower.includes("emoji") || draft.roundId === "r2";
+  const isR1 =
+    roundLower.includes("tech word") ||
+    roundLower.includes("guess") ||
+    roundLower.includes("quick") ||
+    roundLower.includes("q&a") ||
+    draft.roundId === "r1";
+  const isR2 =
+    roundLower.includes("air or real") ||
+    roundLower.includes("air") ||
+    roundLower.includes("real") ||
+    roundLower.includes("emoji") ||
+    draft.roundId === "r2";
   const isR3 = roundLower.includes("taboo") || draft.roundId === "r3";
 
   useEffect(() => {
@@ -241,8 +251,8 @@ function QuestionForm({
     e.preventDefault();
     if (saving) return;
 
-    if (isR2 && !draft.emojiClue?.trim() && !draft.text.trim()) {
-      setError("Please provide an Emoji Clue sequence for Round 2.");
+    if (isR2 && !draft.answer.trim()) {
+      setError("Please select whether the image is 'AI-Generated' or 'Real'.");
       return;
     }
 
@@ -251,8 +261,8 @@ function QuestionForm({
       return;
     }
 
-    if (!isR2 && !isR3 && !draft.text.trim()) {
-      setError("Please enter the question text.");
+    if (isR1 && !draft.answer.trim() && !draft.targetWord?.trim()) {
+      setError("Please provide the target tech word / answer.");
       return;
     }
 
@@ -315,9 +325,15 @@ function QuestionForm({
       : undefined;
 
     const answer = draft.answer.trim() || draft.targetWord?.trim() || "";
-    const targetWord = isR3 ? (draft.targetWord?.trim() || answer) : undefined;
+    const targetWord = isR3
+      ? (draft.targetWord?.trim() || answer)
+      : isR1
+      ? (draft.targetWord?.trim() || answer)
+      : undefined;
     const text = isR2
-      ? draft.text.trim() || draft.emojiClue?.trim() || "Emoji Tech Clue"
+      ? draft.text.trim() || "Determine whether this image is AI-Generated or Real."
+      : isR1
+      ? draft.text.trim() || "Identify the technology represented by this image."
       : draft.text.trim() || (targetWord ? `Describe: ${targetWord}` : "");
 
     onSave({
@@ -325,8 +341,9 @@ function QuestionForm({
       text,
       answer,
       targetWord,
+      options: isR2 ? ["AI-Generated", "Real"] : draft.options,
       tabooWords: tabooWords && tabooWords.length > 0 ? tabooWords : undefined,
-      emojiClue: isR2 ? draft.emojiClue?.trim() : undefined,
+      emojiClue: undefined,
       cardReference: draft.cardReference?.trim() || imageUrl || undefined,
       imageUrl: imageUrl || draft.cardReference?.trim() || "",
       flaggedForReview: draft.flaggedForReview || undefined,
@@ -378,11 +395,11 @@ function QuestionForm({
           </div>
         </div>
 
-        {/* Round 1: AI Quick Q&A Fields */}
+        {/* Round 1: Guess the Tech Word Fields */}
         {isR1 && (
           <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/[0.04] p-4 space-y-3">
             <span className="rounded bg-cyan-500/20 px-2 py-0.5 font-mono text-xs font-bold text-cyan-300">
-              Round 1 — AI Quick Q&A
+              Round 1 — Guess the Tech Word
             </span>
             <div>
               <label htmlFor="q-text" className={labelClass}>
@@ -394,58 +411,97 @@ function QuestionForm({
                 className={inputClass}
                 value={draft.text}
                 onChange={(e) => setDraft({ ...draft, text: e.target.value })}
-                placeholder="e.g. Which test checks if a machine can exhibit human-like intelligence?"
+                placeholder="e.g. Identify this technology or technical concept from the visual clue."
               />
             </div>
             <div>
               <label htmlFor="q-answer" className={labelClass}>
-                Correct Answer (Short / One-Word)
+                Target Tech Word / Correct Answer
               </label>
               <input
                 id="q-answer"
                 className={inputClass}
                 value={draft.answer}
-                onChange={(e) => setDraft({ ...draft, answer: e.target.value })}
-                placeholder="e.g. Turing Test (use | for alternates like Turing Test|Turing)"
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    answer: e.target.value,
+                    targetWord: e.target.value,
+                  })
+                }
+                placeholder="e.g. Docker|Containers|Containerization"
               />
               <p className="mt-1 text-[11px] text-neutral-400">
-                Separate accepted alternates with | (e.g. GPU|Graphics Processing Unit).
+                Separate accepted alternates with | (e.g. Docker|Container|Containers). Participant typing will be evaluated against all aliases (case-insensitive).
               </p>
             </div>
           </div>
         )}
 
-        {/* Round 2: Emoji Tech Guess Fields */}
+        {/* Round 2: Air or Real Fields */}
         {isR2 && (
           <div className="rounded-xl border border-violet-500/30 bg-violet-500/[0.04] p-4 space-y-3">
             <span className="rounded bg-violet-500/20 px-2 py-0.5 font-mono text-xs font-bold text-violet-300">
-              Round 2 — Emoji Tech Guess
+              Round 2 — Air or Real
             </span>
             <div>
-              <label htmlFor="q-emoji" className={labelClass}>
-                Emoji Sequence / Clue
+              <label htmlFor="q-air-real-text" className={labelClass}>
+                Image Prompt / Scene Description
               </label>
               <input
-                id="q-emoji"
-                className={`${inputClass} text-xl`}
-                value={draft.emojiClue ?? draft.text}
-                onChange={(e) =>
-                  setDraft({ ...draft, emojiClue: e.target.value, text: e.target.value })
-                }
-                placeholder="e.g. ☁️ + 💻 or 🧠 + 🤖"
+                id="q-air-real-text"
+                className={inputClass}
+                value={draft.text}
+                onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+                placeholder="e.g. Futuristic cybernetic helmet concept"
               />
             </div>
             <div>
-              <label htmlFor="q-emoji-answer" className={labelClass}>
-                Correct Tech Term / Answer
+              <label className={labelClass}>
+                Correct Classification
               </label>
-              <input
-                id="q-emoji-answer"
-                className={inputClass}
-                value={draft.answer}
-                onChange={(e) => setDraft({ ...draft, answer: e.target.value })}
-                placeholder="e.g. Cloud Computing or Artificial Intelligence"
-              />
+              <div className="grid grid-cols-2 gap-3 mt-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      answer: "AI-Generated",
+                      options: ["AI-Generated", "Real"],
+                    })
+                  }
+                  className={`rounded-lg border px-3 py-2.5 text-xs font-bold transition flex items-center justify-center gap-2 ${
+                    draft.answer === "AI-Generated"
+                      ? "border-violet-400 bg-violet-500/25 text-violet-200 ring-2 ring-violet-400"
+                      : "border-white/10 bg-neutral-900 text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  <span className="text-base">🤖</span> AI-Generated
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      answer: "Real",
+                      options: ["AI-Generated", "Real"],
+                    })
+                  }
+                  className={`rounded-lg border px-3 py-2.5 text-xs font-bold transition flex items-center justify-center gap-2 ${
+                    draft.answer === "Real"
+                      ? "border-emerald-400 bg-emerald-500/25 text-emerald-200 ring-2 ring-emerald-400"
+                      : "border-white/10 bg-neutral-900 text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  <span className="text-base">📷</span> Real
+                </button>
+              </div>
+              <p className="mt-1.5 text-[11px] text-neutral-400">
+                Selected correct answer:{" "}
+                <span className="font-semibold text-cyan-300">
+                  {draft.answer || "None selected"}
+                </span>
+              </p>
             </div>
           </div>
         )}
@@ -577,10 +633,25 @@ function QuestionForm({
           </div>
         </div>
 
-        {/* Optional Image Attachment */}
+        {/* Image Attachment (Visual Clue for R1, Scene Image for R2, Card Image for R3) */}
         <div className="space-y-3 rounded-xl border border-white/10 p-4">
           <div className="flex items-center justify-between">
-            <p className={labelClass}>Visual Asset / Card Image</p>
+            <div>
+              <p className={labelClass}>
+                {isR1
+                  ? "Round 1 Visual Clue Image"
+                  : isR2
+                  ? "Round 2 Air or Real Image"
+                  : "Visual Asset / Card Image"}
+              </p>
+              <p className="text-[11px] text-neutral-400">
+                {isR1
+                  ? "Displayed to participant to identify the tech word."
+                  : isR2
+                  ? "Displayed to participant to classify as AI-Generated or Real."
+                  : "Optional card image reference."}
+              </p>
+            </div>
             {shownImage && (
               <span className="rounded bg-cyan-500/20 px-2 py-0.5 font-mono text-[10px] text-cyan-300">
                 Image Attached
@@ -593,7 +664,7 @@ function QuestionForm({
               <img
                 src={shownImage}
                 alt="Visual preview"
-                className="max-h-40 w-full rounded-lg border border-white/10 bg-neutral-900 object-contain"
+                className="max-h-48 w-full rounded-lg border border-white/10 bg-neutral-900 object-contain"
               />
               <button
                 type="button"
@@ -636,7 +707,13 @@ function QuestionForm({
                     cardReference: e.target.value,
                   });
                 }}
-                placeholder="e.g. /taboo/card-1.jpg or /uploads/..."
+                placeholder={
+                  isR1
+                    ? "e.g. /tech-words/r1-01-docker.png or /uploads/..."
+                    : isR2
+                    ? "e.g. /air-or-real/cyberpunk-city-01.png or /uploads/..."
+                    : "e.g. /taboo/card-1.jpg or /uploads/..."
+                }
               />
             </div>
           </div>
@@ -1323,6 +1400,12 @@ export default function AdminPage() {
           : questions.find((q) => q.id === modal.id)
         : undefined;
 
+      const initialRoundId =
+        activeRoundFilter !== "all" ? activeRoundFilter : (rounds[0]?.id ?? "r1");
+      const isR2Round =
+        initialRoundId === "r2" ||
+        rounds.find((r) => r.id === initialRoundId)?.name.toLowerCase().includes("air");
+
       const initial: QuestionDraft = existing
         ? {
             setId: existing.setId,
@@ -1336,17 +1419,19 @@ export default function AdminPage() {
             tabooWords: existing.tabooWords,
             emojiClue: existing.emojiClue,
             cardReference: existing.cardReference,
+            options: existing.options ?? (existing.roundId === "r2" ? ["AI-Generated", "Real"] : undefined),
             flaggedForReview: existing.flaggedForReview,
             reviewNotes: existing.reviewNotes,
           }
         : {
             setId: activeSetFilter !== "all" ? activeSetFilter : (sets[0]?.id ?? "s1"),
-            roundId: activeRoundFilter !== "all" ? activeRoundFilter : (rounds[0]?.id ?? "r1"),
+            roundId: initialRoundId,
             text: "",
-            answer: "",
+            answer: isR2Round ? "AI-Generated" : "",
             marks: 10,
             timer: 30,
             imageUrl: "",
+            options: isR2Round ? ["AI-Generated", "Real"] : undefined,
           };
 
       return (
@@ -1550,7 +1635,7 @@ export default function AdminPage() {
         <SummaryCard
           label="Rounds"
           value={rounds.length}
-          note="AI Q&A, Emoji, Tech Taboo"
+          note="Guess Tech Word, Air or Real, Tech Taboo"
         />
         <SummaryCard
           label="Assigned Questions"
@@ -2004,7 +2089,7 @@ export default function AdminPage() {
             Unassigned Question Bank (Admin Reserve)
           </h2>
           <p className="text-sm text-neutral-400">
-            Source questions preserved in reserve (Items 21–25 of AI Q&A, 21–30 of Emoji Clues, 21–30 of Tech Taboo).
+            Source questions preserved in reserve (Items 21–25 of Guess the Tech Word, 21–30 of Air or Real, 21–30 of Tech Taboo).
             You can assign any item to a set or keep it here.
           </p>
         </div>
