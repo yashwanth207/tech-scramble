@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { checkAdmin, loadQuiz, saveQuiz } from "@/lib/quiz-store";
+import { checkAdmin, getBackendStatus, loadQuiz, saveQuiz } from "@/lib/quiz-store";
 
 export async function GET(request: Request) {
   const auth = checkAdmin(request);
@@ -12,7 +12,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: result.message }, { status: result.status });
   }
 
-  return NextResponse.json({ data: result.value }, { headers: { "Cache-Control": "no-store" } });
+  const backend = getBackendStatus();
+
+  return NextResponse.json(
+    {
+      data: result.value,
+      backend: {
+        activeProvider: backend.activeProvider,
+        isSupabaseConfigured: backend.isSupabaseConfigured,
+        isFirebaseConfigured: backend.isFirebaseConfigured,
+        hasSupabaseUrl: Boolean(backend.supabaseUrl),
+        hasSupabaseKey: Boolean(backend.supabaseKey),
+      },
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 export async function PUT(request: Request) {
