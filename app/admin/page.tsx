@@ -1055,18 +1055,9 @@ export default function AdminPage() {
     }
   }
 
-  // Persistent save to database with 5-question guard
+  // Persistent save to database
   useEffect(() => {
     if (!unlocked || snapshot === lastSaved.current) return;
-
-    // Check validation guard: prevent saving if round counts are not exactly 5
-    if (!validationReport.isValid) {
-      setSaveState({
-        kind: "validation-blocked",
-        message: `Validation guard active: Each round in every set must contain exactly 5 questions (${validationReport.totalAssigned}/60 assigned). Autosave paused until resolved.`,
-      });
-      return;
-    }
 
     setSaveState({ kind: "saving" });
     const timer = setTimeout(async () => {
@@ -1088,7 +1079,7 @@ export default function AdminPage() {
       }
     }, 600);
     return () => clearTimeout(timer);
-  }, [unlocked, snapshot, uploadKey, retryTick, validationReport]);
+  }, [unlocked, snapshot, uploadKey, retryTick]);
 
   const setName = (id: string) => sets.find((s) => s.id === id)?.name ?? "Unknown set";
   const roundName = (id: string) => rounds.find((r) => r.id === id)?.name ?? "Unknown round";
@@ -1253,6 +1244,19 @@ export default function AdminPage() {
     setUnassignedQuestions((prev) =>
       prev.map((q) => (q.id === id ? { ...q, flaggedForReview: false, reviewNotes: undefined } : q)),
     );
+  }
+
+  function clearAllQuestionsToBank() {
+    if (questions.length === 0) return;
+    if (
+      !window.confirm(
+        `Move all ${questions.length} assigned question(s) from every set into the Unassigned Question Bank? Sets will become empty.`,
+      )
+    )
+      return;
+    const moved = questions.map((q) => ({ ...q, setId: "unassigned" }));
+    setUnassignedQuestions((prev) => [...moved, ...prev]);
+    setQuestions([]);
   }
 
   function resetAllToStandard() {
@@ -1423,6 +1427,16 @@ export default function AdminPage() {
       >
         + Round
       </button>
+      {questions.length > 0 && (
+        <button
+          type="button"
+          className={dangerBtn}
+          onClick={clearAllQuestionsToBank}
+          title="Move all assigned questions from every set into the Unassigned Question Bank"
+        >
+          Clear Sets to Bank
+        </button>
+      )}
     </div>
   );
 
@@ -1431,7 +1445,28 @@ export default function AdminPage() {
   const overview = (
     <div className="space-y-8">
       {/* 5-Question Validation Guard Banner */}
-      {!validationReport.isValid ? (
+      {questions.length === 0 ? (
+        <div className="rounded-2xl border border-cyan-500/40 bg-cyan-500/[0.06] p-5 space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🗂️</span>
+              <h3 className="font-bold text-cyan-300 text-base tracking-tight">
+                All Sets Cleared — Questions Stored in Unassigned Bank
+              </h3>
+            </div>
+            <button
+              type="button"
+              className={primaryBtn}
+              onClick={resetAllToStandard}
+            >
+              Restore Standard 5 Qs Distribution
+            </button>
+          </div>
+          <p className="text-sm text-neutral-300">
+            All 4 sets currently have <strong>0 assigned questions</strong>. All {unassignedQuestions.length} questions are safely kept in the <strong>Unassigned Question Bank</strong>. You can assign questions manually from the Unassigned Bank, or click the button above to auto-assign 5 per round.
+          </p>
+        </div>
+      ) : !validationReport.isValid ? (
         <div className="rounded-2xl border border-amber-500/40 bg-amber-500/[0.08] p-5 space-y-3">
           <div className="flex items-center gap-2">
             <span className="text-xl">⚠️</span>
