@@ -1030,6 +1030,19 @@ export default function AdminPage() {
   const [unlocked, setUnlocked] = useState<boolean>(false);
   const [unlocking, setUnlocking] = useState<boolean>(false);
   const [unlockError, setUnlockError] = useState<string>("");
+  const [supabaseHealth, setSupabaseHealth] = useState<{
+    configured: boolean;
+    supabaseUrl?: string;
+    connected?: boolean;
+    tableExists?: boolean;
+    hasData?: boolean;
+    questionCount?: number;
+    unassignedCount?: number;
+    lastUpdated?: string;
+    error?: string;
+  } | null>(null);
+  const [syncingSupabase, setSyncingSupabase] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
   const [saveState, setSaveState] = useState<
     | { kind: "clean" }
     | { kind: "saving" }
@@ -1107,11 +1120,15 @@ export default function AdminPage() {
       });
       const body = (await res.json().catch(() => null)) as {
         data?: StoredQuiz | null;
+        supabaseStatus?: typeof supabaseHealth;
         error?: string;
       } | null;
       if (!res.ok) {
         setUnlockError(body?.error ?? `Could not load data (HTTP ${res.status}).`);
         return;
+      }
+      if (body?.supabaseStatus) {
+        setSupabaseHealth(body.supabaseStatus);
       }
       if (body?.data && body.data.sets.length > 0) {
         setSets(body.data.sets);
@@ -1132,6 +1149,39 @@ export default function AdminPage() {
     }
   }
 
+  async function forceSyncSupabase() {
+    if (!uploadKey.trim()) return;
+    setSyncingSupabase(true);
+    setSyncMessage("");
+    try {
+      const res = await fetch("/api/admin/quiz", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-admin-key": uploadKey.trim() },
+        body: snapshot,
+      });
+      const data = (await res.json().catch(() => null)) as {
+        supabaseStatus?: typeof supabaseHealth;
+        error?: string;
+      } | null;
+      if (data?.supabaseStatus) {
+        setSupabaseHealth(data.supabaseStatus);
+        if (data.supabaseStatus.configured && data.supabaseStatus.hasData) {
+          setSyncMessage(
+            `✓ Successfully verified: ${data.supabaseStatus.questionCount} assigned questions & ${data.supabaseStatus.unassignedCount} reserve questions safely stored in Supabase!`,
+          );
+        } else if (data.supabaseStatus.error) {
+          setSyncMessage(`⚠️ ${data.supabaseStatus.error}`);
+        }
+      } else if (data?.error) {
+        setSyncMessage(`❌ ${data.error}`);
+      }
+    } catch {
+      setSyncMessage("Could not contact server to sync with Supabase.");
+    } finally {
+      setSyncingSupabase(false);
+    }
+  }
+
   // Persistent save to database
   useEffect(() => {
     if (!unlocked || snapshot === lastSaved.current) return;
@@ -1147,6 +1197,12 @@ export default function AdminPage() {
         if (res.ok) {
           lastSaved.current = snapshot;
           setSaveState({ kind: "saved" });
+          const body = (await res.json().catch(() => null)) as {
+            supabaseStatus?: typeof supabaseHealth;
+          } | null;
+          if (body?.supabaseStatus) {
+            setSupabaseHealth(body.supabaseStatus);
+          }
         } else {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
           setSaveState({ kind: "error", message: body?.error ?? `Save failed (HTTP ${res.status}).` });
@@ -2301,30 +2357,129 @@ export default function AdminPage() {
 
   const settingsView = (
     <div className="max-w-2xl space-y-6">
-      <div className={`${cardClass} p-5 space-y-3 border-l-4 border-l-cyan-400`}>
-        <p className="font-mono text-xs uppercase tracking-widest text-cyan-300 font-bold">
-          Backend & Storage Status
-        </p>
-        <div className="rounded-lg bg-black/40 p-3 font-mono text-xs text-neutral-300 space-y-1.5">
-          <p>
-            Storage mode:{" "}
-            <span className="text-emerald-400 font-bold">
-              Local File System (data/quiz-state.json) & Memory Store
-            </span>
-          </p>
-          <p>
-            Assigned Questions:{" "}
-            <span className="text-cyan-300 font-bold">{questions.length}</span> / 60
-          </p>
-          <p>
-            Unassigned Question Bank:{" "}
-            <span className="text-violet-300 font-bold">{unassignedQuestions.length}</span> items
-          </p>
-          <p>
-            Card / Clue Assets:{" "}
-            <span className="text-emerald-400 font-bold">public/taboo/card-1.jpg..30.jpg</span>
-          </p>
+      {/* Supabase PostgreSQL Integration & Storage Status Card */}
+      <div
+        className={`${cardClass} p-5 space-y-4 border-l-4 ${
+          supabaseHealth?.connected && supabaseHealth?.hasData
+            ? "border-l-emerald-400 bg-emerald-500/[0.02]"
+            : supabaseHealth?.configured
+            ? "border-l-amber-400 bg-amber-500/[0.02]"
+            : "border-l-violet-400 bg-violet-500/[0.02]"
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-widest text-neutral-400 font-bold">
+              Supabase Database Storage Status
+            </p>
+            <h3 className="text-lg font-bold text-white mt-1">
+              {supabaseHealth?.connected && supabaseHealth?.hasData ? (
+                <span className="text-emerald-400 flex items-center gap-2">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Supabase Connected & Storing Data
+                </span>
+              ) : supabaseHealth?.configured ? (
+                <span className="text-amber-400 flex items-center gap-2">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" />
+                  Supabase Connected (Setup Action Required)
+                </span>
+              ) : (
+                <span className="text-neutral-300 flex items-center gap-2">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-neutral-500" />
+                  Local / Serverless Memory (Supabase Not Configured)
+                </span>
+              )}
+            </h3>
+          </div>
+          <button
+            type="button"
+            className={primaryBtn}
+            onClick={forceSyncSupabase}
+            disabled={syncingSupabase}
+          >
+            {syncingSupabase ? "Testing & Syncing..." : "🔄 Test & Sync Supabase"}
+          </button>
         </div>
+
+        {syncMessage && (
+          <p className="rounded-lg bg-black/40 p-2.5 font-mono text-xs text-cyan-300">
+            {syncMessage}
+          </p>
+        )}
+
+        <div className="rounded-lg bg-black/40 p-3 font-mono text-xs text-neutral-300 space-y-2">
+          {supabaseHealth?.configured ? (
+            <>
+              <p>
+                Supabase URL: <span className="text-cyan-300 font-bold">{supabaseHealth.supabaseUrl}</span>
+              </p>
+              <p>
+                Table Status:{" "}
+                <span className={supabaseHealth.tableExists ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>
+                  {supabaseHealth.tableExists ? "quiz_state table exists ✓" : "quiz_state table missing ✗"}
+                </span>
+              </p>
+              {supabaseHealth.hasData ? (
+                <>
+                  <p>
+                    Questions stored in Supabase:{" "}
+                    <span className="text-emerald-400 font-bold">{supabaseHealth.questionCount}</span> / 60
+                  </p>
+                  <p>
+                    Reserve items in Supabase:{" "}
+                    <span className="text-violet-300 font-bold">{supabaseHealth.unassignedCount}</span> items
+                  </p>
+                  {supabaseHealth.lastUpdated && (
+                    <p className="text-neutral-400">
+                      Last Updated: {new Date(supabaseHealth.lastUpdated).toLocaleString()}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-amber-300">
+                  {supabaseHealth.error || "No data saved in table yet."}
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="space-y-2 text-xs">
+              <p className="text-amber-300 font-bold">
+                ⚠️ Supabase environment variables are not yet configured on Vercel.
+              </p>
+              <p className="text-neutral-400">
+                To connect Supabase, add these 2 environment variables in your Vercel Project Settings → Environment Variables:
+              </p>
+              <div className="rounded bg-black/60 p-2.5 font-mono text-[11px] text-cyan-300 select-all space-y-1">
+                <p>NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co</p>
+                <p>SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key</p>
+              </div>
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-white/5 space-y-1 text-neutral-400">
+            <p>
+              Active Assigned Questions in Memory:{" "}
+              <span className="text-cyan-300 font-bold">{questions.length}</span> / 60
+            </p>
+            <p>
+              Reserve Questions in Bank:{" "}
+              <span className="text-violet-300 font-bold">{unassignedQuestions.length}</span> items
+            </p>
+          </div>
+        </div>
+
+        {(!supabaseHealth?.tableExists || !supabaseHealth?.configured) && (
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs space-y-1.5">
+            <p className="font-bold text-white">Supabase SQL Schema (Run once in Supabase SQL Editor):</p>
+            <pre className="rounded bg-black/60 p-2.5 font-mono text-[11px] text-emerald-300 overflow-x-auto select-all">
+{`CREATE TABLE IF NOT EXISTS quiz_state (
+  id integer PRIMARY KEY,
+  data jsonb NOT NULL,
+  updated_at timestamptz DEFAULT now()
+);`}
+            </pre>
+          </div>
+        )}
       </div>
 
       <div className={`${cardClass} p-5 space-y-3`}>

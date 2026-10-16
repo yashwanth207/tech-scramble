@@ -235,6 +235,117 @@ export function sanitizeQuiz(input: unknown): StoredQuiz | null {
 
 /* ---------- Supabase REST Integration (When Supabase is provided) ---------- */
 
+export type SupabaseHealthResult = {
+  configured: boolean;
+  supabaseUrl?: string;
+  connected?: boolean;
+  tableExists?: boolean;
+  hasData?: boolean;
+  questionCount?: number;
+  unassignedCount?: number;
+  lastUpdated?: string;
+  error?: string;
+};
+
+export async function checkSupabaseHealth(): Promise<SupabaseHealthResult> {
+  const { supabaseUrl, supabaseKey, isSupabaseConfigured } = getBackendStatus();
+  if (!isSupabaseConfigured) {
+    return {
+      configured: false,
+      error: "Supabase environment variables (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY) are not set.",
+    };
+  }
+
+  const maskedUrl = supabaseUrl.replace(/^(https:\/\/[^.]+).*/, "$1.supabase.co");
+
+  try {
+    const res = await fetch(`${supabaseUrl}/rest/v1/quiz_state?id=eq.1&select=id,data,updated_at`, {
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+      },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      let message = errText;
+      try {
+        const j = JSON.parse(errText);
+        message = j.message || j.error || errText;
+      } catch {
+        // ignore
+      }
+
+      if (res.status === 404 || message.includes("relation") || message.includes("does not exist")) {
+        return {
+          configured: true,
+          supabaseUrl: maskedUrl,
+          connected: true,
+          tableExists: false,
+          error: "Table 'quiz_state' does not exist in Supabase yet. Please run the SQL snippet in Supabase SQL editor.",
+        };
+      }
+
+      if (res.status === 401 || res.status === 403) {
+        return {
+          configured: true,
+          supabaseUrl: maskedUrl,
+          connected: false,
+          error: `Supabase authentication failed (HTTP ${res.status}). Verify SUPABASE_SERVICE_ROLE_KEY.`,
+        };
+      }
+
+      return {
+        configured: true,
+        supabaseUrl: maskedUrl,
+        connected: false,
+        error: `Supabase error (HTTP ${res.status}): ${message || res.statusText}`,
+      };
+    }
+
+    const rows = (await res.json().catch(() => null)) as {
+      id: number;
+      data?: StoredQuiz;
+      updated_at?: string;
+    }[] | null;
+
+    if (!rows || rows.length === 0 || !rows[0].data) {
+      return {
+        configured: true,
+        supabaseUrl: maskedUrl,
+        connected: true,
+        tableExists: true,
+        hasData: false,
+        error: "Table 'quiz_state' exists, but row id=1 is empty. Save quiz in Admin to initialize.",
+      };
+    }
+
+    const qCount = Array.isArray(rows[0].data.questions) ? rows[0].data.questions.length : 0;
+    const uCount = Array.isArray(rows[0].data.unassignedQuestions)
+      ? rows[0].data.unassignedQuestions.length
+      : 0;
+
+    return {
+      configured: true,
+      supabaseUrl: maskedUrl,
+      connected: true,
+      tableExists: true,
+      hasData: true,
+      questionCount: qCount,
+      unassignedCount: uCount,
+      lastUpdated: rows[0].updated_at,
+    };
+  } catch (err: unknown) {
+    return {
+      configured: true,
+      supabaseUrl: maskedUrl,
+      connected: false,
+      error: err instanceof Error ? err.message : "Network error contacting Supabase.",
+    };
+  }
+}
+
 async function loadQuizFromSupabase(): Promise<StoredQuiz | null> {
   const { supabaseUrl, supabaseKey } = getBackendStatus();
   if (!supabaseUrl || !supabaseKey) return null;
@@ -252,7 +363,7 @@ async function loadQuizFromSupabase(): Promise<StoredQuiz | null> {
   }
 }
 
-async function saveQuizToSupabase(clean: StoredQuiz): Promise<boolean> {
+export async function saveQuizToSupabase(clean: StoredQuiz): Promise<boolean> {
   const { supabaseUrl, supabaseKey } = getBackendStatus();
   if (!supabaseUrl || !supabaseKey) return false;
   try {
