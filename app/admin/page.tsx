@@ -205,6 +205,7 @@ function QuestionForm({
     roundLower.includes("q&a") ||
     draft.roundId === "r1";
   const isR2 =
+    roundLower.includes("ai or real") ||
     roundLower.includes("air or real") ||
     roundLower.includes("air") ||
     roundLower.includes("real") ||
@@ -438,11 +439,11 @@ function QuestionForm({
           </div>
         )}
 
-        {/* Round 2: Air or Real Fields */}
+        {/* Round 2: AI or Real Fields */}
         {isR2 && (
           <div className="rounded-xl border border-violet-500/30 bg-violet-500/[0.04] p-4 space-y-3">
             <span className="rounded bg-violet-500/20 px-2 py-0.5 font-mono text-xs font-bold text-violet-300">
-              Round 2 — Air or Real
+              Round 2 — AI or Real
             </span>
             <div>
               <label htmlFor="q-air-real-text" className={labelClass}>
@@ -641,7 +642,7 @@ function QuestionForm({
                 {isR1
                   ? "Round 1 Visual Clue Image"
                   : isR2
-                  ? "Round 2 Air or Real Image"
+                  ? "Round 2 AI or Real Image"
                   : "Visual Asset / Card Image"}
               </p>
               <p className="text-[11px] text-neutral-400">
@@ -1691,7 +1692,7 @@ export default function AdminPage() {
         <SummaryCard
           label="Rounds"
           value={rounds.length}
-          note="Guess Tech Word, Air or Real, Tech Taboo"
+          note="Guess Tech Word, AI or Real, Tech Taboo"
         />
         <SummaryCard
           label="Assigned Questions"
@@ -2145,7 +2146,7 @@ export default function AdminPage() {
             Unassigned Question Bank (Admin Reserve)
           </h2>
           <p className="text-sm text-neutral-400">
-            Source questions preserved in reserve (Items 21–25 of Guess the Tech Word, 21–30 of Air or Real, 21–30 of Tech Taboo).
+            Source questions preserved in reserve (Items 21–25 of Guess the Tech Word, 21–30 of AI or Real, 21–30 of Tech Taboo).
             You can assign any item to a set or keep it here.
           </p>
         </div>

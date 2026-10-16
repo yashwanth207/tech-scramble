@@ -79,11 +79,11 @@ export interface LeaderboardEntry {
 /* ---------- Canonical Round Names ---------- */
 
 export const ROUND_1_NAME = "guess the tech word";
-export const ROUND_2_NAME = "air or real";
+export const ROUND_2_NAME = "ai or real";
 export const ROUND_3_NAME = "tech taboo";
 
 // Legacy aliases for backward compatibility
-export const IMAGE_ROUND_NAME = "air or real";
+export const IMAGE_ROUND_NAME = "ai or real";
 export const TABOO_ROUND_NAME = "tech taboo";
 export const TIKTOK_ROUND_NAME = "guess the tech word";
 
@@ -96,7 +96,7 @@ export const INITIAL_SETS: StoredSet[] = [
 
 export const INITIAL_ROUNDS: StoredRound[] = [
   { id: "r1", name: "Guess the Tech Word" },
-  { id: "r2", name: "Air or Real" },
+  { id: "r2", name: "AI or Real" },
   { id: "r3", name: "Tech Taboo" },
 ];
 
@@ -139,7 +139,7 @@ export const TECH_WORD_SOURCE: TechWordItem[] = [
   { number: 25, question: "Identify the phenomenon when a generative language model confidently outputs false or fabricated facts:", targetWord: "Hallucination", accepted: "Hallucination|AI Hallucination|Confabulation" },
 ];
 
-/** Round 2 — 30 Air or Real Items (AI-Generated vs Real) */
+/** Round 2 — 30 AI or Real Items (AI-Generated vs Real) */
 export interface AirOrRealItem {
   number: number;
   text: string;
@@ -233,7 +233,7 @@ export const TECH_TABOO_SOURCE: TechTabooItem[] = [
 /**
  * Builds the canonical quiz structure:
  * - Exactly 4 sets: Alpha, Beta, Gamma, Delta
- * - Exactly 3 rounds: Guess the Tech Word, Air or Real, Tech Taboo
+ * - Exactly 3 rounds: Guess the Tech Word, AI or Real, Tech Taboo
  * - Exactly 5 questions per round per set (60 assigned questions total)
  * - Questions 1–5 -> Alpha, 6–10 -> Beta, 11–15 -> Gamma, 16–20 -> Delta
  * - Remaining items (R1: 21–25, R2: 21–30, R3: 21–30) preserved in unassignedQuestions
@@ -263,7 +263,7 @@ export function buildDefaultQuiz(): StoredQuiz {
       });
     }
 
-    // Round 2: Air or Real (5 items, options: ["AI-Generated", "Real"])
+    // Round 2: AI or Real (5 items, options: ["AI-Generated", "Real"])
     for (let i = 0; i < 5; i++) {
       const item = AIR_OR_REAL_SOURCE[startIdx + i];
       questions.push({

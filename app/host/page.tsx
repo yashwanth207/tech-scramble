@@ -498,9 +498,9 @@ export default function HostPage() {
 
                     {/* Question Header & Title */}
                     <div className="space-y-3">
-                      {isTabooRound ? null : roundName.toLowerCase().includes("air or real") || current.roundId === "r2" ? (
+                      {isTabooRound ? null : roundName.toLowerCase().includes("ai or real") || roundName.toLowerCase().includes("air or real") || current.roundId === "r2" ? (
                         <span className="inline-block rounded bg-violet-500/20 px-2.5 py-0.5 font-mono text-xs font-semibold text-violet-300">
-                          Round 2 — Air or Real
+                          Round 2 — AI or Real
                         </span>
                       ) : (
                         <span className="inline-block rounded bg-cyan-500/20 px-2.5 py-0.5 font-mono text-xs font-semibold text-cyan-300">
@@ -684,7 +684,7 @@ export default function HostPage() {
                             <th className="py-3 px-4">Team</th>
                             <th className="py-3 px-4">Question Set</th>
                             <th className="py-3 px-4 text-right">R1 (Tech Word)</th>
-                            <th className="py-3 px-4 text-right">R2 (Air or Real)</th>
+                            <th className="py-3 px-4 text-right">R2 (AI or Real)</th>
                             <th className="py-3 px-4 text-right">R3 (Tech Taboo)</th>
                             <th className="py-3 px-4 text-right">Total Score</th>
                           </tr>

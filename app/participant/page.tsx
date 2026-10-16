@@ -49,6 +49,7 @@ interface LeaderboardEntry {
 
 const ROUND_BLURBS: Record<string, string> = {
   "guess the tech word": "Inspect the visual clue and identify the technology or technical word.",
+  "ai or real": "Inspect the image and decide whether it is AI-Generated or Real.",
   "air or real": "Inspect the image and decide whether it is AI-Generated or Real.",
   "tech taboo": "Describe the tech term without uttering any of the prohibited words!",
 };
@@ -181,8 +182,10 @@ export default function ParticipantPage() {
   const roundNameOf = (roundId: string) => rounds.find((r) => r.id === roundId)?.name ?? "";
   const isTechWordRound = (q: PublicQuestion) =>
     roundNameOf(q.roundId).trim().toLowerCase().includes("tech word") || q.roundId === "r1";
-  const isAirOrRealRound = (q: PublicQuestion) =>
-    roundNameOf(q.roundId).trim().toLowerCase().includes("air or real") || q.roundId === "r2";
+  const isAirOrRealRound = (q: PublicQuestion) => {
+    const name = roundNameOf(q.roundId).trim().toLowerCase();
+    return name.includes("ai or real") || name.includes("air or real") || name.includes("real") || q.roundId === "r2";
+  };
   const isTabooRound = (q: PublicQuestion) =>
     roundNameOf(q.roundId).trim().toLowerCase().includes("taboo") || q.roundId === "r3" || Boolean(q.tabooWords && q.tabooWords.length > 0);
   const blurbFor = (name: string) => ROUND_BLURBS[name.trim().toLowerCase()] ?? "Answer the questions in this round.";
@@ -580,12 +583,12 @@ export default function ParticipantPage() {
       </div>
 
       <div className={`${cardClass} space-y-6 p-5 sm:p-8`}>
-        {/* Round 2 — Air or Real */}
+        {/* Round 2 — AI or Real */}
         {isAirOrRealRound(currentQuestion) ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-violet-500/20 pb-2.5">
               <span className="rounded-md bg-violet-500/20 px-2.5 py-1 font-mono text-xs font-bold uppercase tracking-wider text-violet-300">
-                Round 2 — Air or Real
+                Round 2 — AI or Real
               </span>
               <span className="font-mono text-xs text-neutral-400">
                 Decide: Is this image AI-Generated or Real?
@@ -618,7 +621,7 @@ export default function ParticipantPage() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={currentQuestion.imageUrl}
-                    alt="Air or Real image visual"
+                    alt="AI or Real image visual"
                     className="mx-auto max-h-80 w-full object-contain"
                   />
                 </div>

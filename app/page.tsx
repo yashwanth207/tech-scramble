@@ -22,7 +22,7 @@ const rounds: Round[] = [
   },
   {
     id: "02",
-    title: "Round 2 — Air or Real",
+    title: "Round 2 — AI or Real",
     tag: "Round Two",
     description:
       "Inspect the image and decide whether it is AI-generated or real.",
